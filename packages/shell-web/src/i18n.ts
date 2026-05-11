@@ -9,7 +9,7 @@ const LOCALE_CHANGED_EVENT = "gridlore:locale-changed";
 
 const DICTS: Record<Locale, Dict> = {
   en: {
-    "app.title": "_DEMO_",
+    "app.title": "DUNGEON AND PAWS",
     "header.langLabel": "Language",
     "header.helpLabel": "How to play",
     "header.settingsLabel": "Settings",
@@ -197,7 +197,7 @@ const DICTS: Record<Locale, Dict> = {
     "rune.blood": "blood",
   },
   es: {
-    "app.title": "_DEMO_",
+    "app.title": "DUNGEON AND PAWS",
     "header.langLabel": "Idioma",
     "header.helpLabel": "Cómo jugar",
     "header.settingsLabel": "Ajustes",
@@ -385,7 +385,7 @@ const DICTS: Record<Locale, Dict> = {
     "rune.blood": "sangre",
   },
   pt: {
-    "app.title": "_DEMO_",
+    "app.title": "DUNGEON AND PAWS",
     "header.langLabel": "Idioma",
     "header.helpLabel": "Como jogar",
     "header.settingsLabel": "Ajustes",

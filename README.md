@@ -1,8 +1,6 @@
-# GRIDLORE
+# Dungeon and Paws
 
-Procedural dungeon-puzzle roguelike. Tap-to-move on a 9×9 lattice; charge Sudoku-like rune Lines to detonate the dungeon.
-
-See `/Users/exponentiadev/.claude/plans/yes-i-want-you-snappy-blanket.md` for the full design + technical plan.
+Procedural dungeon-puzzle roguelike. Tap or swipe to move on a 9×9 lattice; charge Sudoku-like rune lines to unleash keystone effects.
 
 ## Workspace
 
