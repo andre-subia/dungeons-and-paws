@@ -5,6 +5,8 @@ export type HeroState = {
   readonly position: Cell;
   readonly hp: number;
   readonly hpMax: number;
+  readonly level: number;
+  readonly xp: number;
   readonly stride: number;
   readonly attack: number;
   readonly focus: number;
@@ -30,12 +32,46 @@ export const WANDERER_TEMPLATE: HeroTemplate = {
   focusMax: 2,
 };
 
+export function xpToNextLevel(level: number): number {
+  const lvl = Math.max(1, Math.floor(level));
+  return 20 + (lvl - 1) * 10;
+}
+
+export type XpGainResult = {
+  readonly hero: HeroState;
+  readonly levelsGained: number;
+};
+
+export function grantXp(hero: HeroState, amount: number): XpGainResult {
+  let xp = hero.xp + Math.max(0, Math.floor(amount));
+  let level = hero.level;
+  let hpMax = hero.hpMax;
+  const hp = hero.hp;
+  let gained = 0;
+
+  while (xp >= xpToNextLevel(level)) {
+    xp -= xpToNextLevel(level);
+    level += 1;
+    gained += 1;
+    const hpDelta = 2;
+    hpMax += hpDelta;
+  }
+
+  if (gained === 0 && xp === hero.xp) return { hero, levelsGained: 0 };
+  return {
+    hero: { ...hero, xp, level, hpMax },
+    levelsGained: gained,
+  };
+}
+
 export function spawnHero(template: HeroTemplate, position: Cell): HeroState {
   return {
     characterId: template.characterId,
     position,
     hp: template.hpMax,
     hpMax: template.hpMax,
+    level: 1,
+    xp: 0,
     stride: template.stride,
     attack: template.attack,
     focus: template.focusMax,

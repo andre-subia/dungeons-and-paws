@@ -118,13 +118,13 @@ describe("turn pipeline + combat", () => {
 });
 
 describe("floor generator — enemy placement", () => {
-  it("places floorIndex+2 enemies (capped at 4)", () => {
+  it("places a small number of enemies (difficulty lowered)", () => {
     const f0 = generateFloor("GEN-01", 0, SMALL_GRID);
     const f1 = generateFloor("GEN-01", 1, SMALL_GRID);
     const f2 = generateFloor("GEN-01", 2, SMALL_GRID);
-    expect(f0.enemies.size).toBe(2);
-    expect(f1.enemies.size).toBe(3);
-    expect(f2.enemies.size).toBe(4);
+    expect(f0.enemies.size).toBe(1);
+    expect(f1.enemies.size).toBe(1);
+    expect(f2.enemies.size).toBe(1);
   });
 
   it("never places an enemy on the hero start or exit cell", () => {

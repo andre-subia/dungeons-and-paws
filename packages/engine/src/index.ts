@@ -56,7 +56,7 @@ export {
 export type { LatticeState, LatticeSnapshot } from "./world/lattice.js";
 
 // Entities
-export { spawnHero, WANDERER_TEMPLATE } from "./entities/hero.js";
+export { spawnHero, WANDERER_TEMPLATE, xpToNextLevel } from "./entities/hero.js";
 export type { HeroState, HeroTemplate } from "./entities/hero.js";
 
 export type {

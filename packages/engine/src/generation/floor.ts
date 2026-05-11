@@ -32,7 +32,8 @@ import {
   type EnemyTemplateId,
 } from "../entities/enemy-templates.js";
 
-const RUNE_DENSITY = 0.5;
+const RUNE_DENSITY = 0.55;
+const MAX_GRID_DIM = 6;
 
 export function generateFloor(
   seed: string,
@@ -40,13 +41,13 @@ export function generateFloor(
   dims: GridDimensions,
 ): FloorState {
   const rng = new SeededRNG(`floor:${seed}:${floorIndex}`);
-  const heroStart: Cell = { x: 0, y: dims.size - 1 };
-  const exitCell: Cell = { x: dims.size - 1, y: 0 };
+  const heroStart: Cell = { x: 0, y: dims.height - 1 };
+  const exitCell: Cell = { x: dims.width - 1, y: 0 };
 
   let grid = Grid.empty(dims, (i) => emptyTile(`f${floorIndex}-init-${i}`));
 
-  for (let y = 0; y < dims.size; y++) {
-    for (let x = 0; x < dims.size; x++) {
+  for (let y = 0; y < dims.height; y++) {
+    for (let x = 0; x < dims.width; x++) {
       if (x === heroStart.x && y === heroStart.y) continue;
       if (x === exitCell.x && y === exitCell.y) continue;
       if (rng.next() > RUNE_DENSITY) continue;
@@ -81,14 +82,13 @@ export function generateFloor(
 
 /**
  * Enemy count scales with floor index. Capped to leave room for runes
- * on the small board (3×3 = 9 cells; reserves hero start + exit).
+ * on small boards (reserves hero start + exit + rune fuel).
  */
-function enemyCountForFloor(floorIndex: number, gridSize: number): number {
-  const wanted = Math.min(floorIndex + 2, 4);
-  // Leave at least 2 non-enemy candidate cells so runes can survive the
-  // overwrite step — we want some lattice fuel on the board.
-  const candidateCount = gridSize * gridSize - 2;
-  return Math.max(0, Math.min(wanted, candidateCount - 2));
+function enemyCountForFloor(floorIndex: number, width: number, height: number): number {
+  const wanted = floorIndex < 3 ? 1 : floorIndex < 10 ? 2 : 3;
+  const candidateCount = width * height - 2;
+  const maxEnemies = Math.max(0, candidateCount - 4);
+  return Math.max(0, Math.min(wanted, maxEnemies));
 }
 
 function placeEnemies(
@@ -99,7 +99,7 @@ function placeEnemies(
   exitCell: Cell,
 ): { grid: Grid; enemies: Map<string, EnemyState> } {
   const enemies = new Map<string, EnemyState>();
-  const count = enemyCountForFloor(floorIndex, grid.size);
+  const count = enemyCountForFloor(floorIndex, grid.width, grid.height);
   if (count <= 0) return { grid, enemies };
 
   const pool = pickTemplatePool(floorIndex);
@@ -151,8 +151,8 @@ function placeEnemies(
 }
 
 function pickTemplatePool(floorIndex: number): readonly EnemyTemplateId[] {
-  if (floorIndex === 0) return EASY_TEMPLATES;
-  if (floorIndex === 1) return MEDIUM_TEMPLATES;
+  if (floorIndex < 5) return EASY_TEMPLATES;
+  if (floorIndex < 25) return MEDIUM_TEMPLATES;
   return HARD_TEMPLATES;
 }
 
@@ -183,7 +183,7 @@ function firstRuneCellInLattice(grid: Grid, kind: "row" | "column" | "chamber", 
   switch (kind) {
     case "row": {
       const y = index;
-      for (let x = 0; x < grid.size; x++) {
+      for (let x = 0; x < grid.width; x++) {
         const c = { x, y };
         if (grid.get(c).kind === "rune") return c;
       }
@@ -191,20 +191,20 @@ function firstRuneCellInLattice(grid: Grid, kind: "row" | "column" | "chamber", 
     }
     case "column": {
       const x = index;
-      for (let y = 0; y < grid.size; y++) {
+      for (let y = 0; y < grid.height; y++) {
         const c = { x, y };
         if (grid.get(c).kind === "rune") return c;
       }
       return null;
     }
     case "chamber": {
-      const chambersPerRow = grid.size / grid.chamberSize;
+      const chambersPerRow = grid.chamberCols;
       const cx = index % chambersPerRow;
       const cy = Math.floor(index / chambersPerRow);
-      const x0 = cx * grid.chamberSize;
-      const y0 = cy * grid.chamberSize;
-      for (let dy = 0; dy < grid.chamberSize; dy++) {
-        for (let dx = 0; dx < grid.chamberSize; dx++) {
+      const x0 = cx * grid.chamberWidth;
+      const y0 = cy * grid.chamberHeight;
+      for (let dy = 0; dy < grid.chamberHeight; dy++) {
+        for (let dx = 0; dx < grid.chamberWidth; dx++) {
           const c = { x: x0 + dx, y: y0 + dy };
           if (grid.get(c).kind === "rune") return c;
         }
@@ -212,4 +212,23 @@ function firstRuneCellInLattice(grid: Grid, kind: "row" | "column" | "chamber", 
       return null;
     }
   }
+}
+
+export function gridDimsForFloor(floorIndex: number, base: GridDimensions): GridDimensions {
+  const steps = Math.floor(floorIndex / 10);
+  let width = base.width;
+  let height = base.height;
+
+  for (let i = 1; i <= steps; i++) {
+    if (width >= MAX_GRID_DIM && height >= MAX_GRID_DIM) break;
+    if (i % 2 === 1) height = Math.min(MAX_GRID_DIM, height + 1);
+    else width = Math.min(MAX_GRID_DIM, width + 1);
+  }
+
+  return {
+    width,
+    height,
+    chamberWidth: width,
+    chamberHeight: height,
+  };
 }

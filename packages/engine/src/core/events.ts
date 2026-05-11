@@ -94,5 +94,10 @@ export type GameEvent =
       readonly enemyId: EntityId;
       readonly cell: Cell;
     }
+  | {
+      readonly type: "HERO_LEVELED_UP";
+      readonly level: number;
+      readonly hpMax: number;
+    }
   | { readonly type: "FLOOR_COMPLETED"; readonly floorIndex: number }
   | { readonly type: "HERO_DIED"; readonly atTurn: number };

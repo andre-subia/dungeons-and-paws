@@ -25,8 +25,9 @@ import { resolveTileAt } from "./resolve.js";
 import { spawnEndOfTurnRune } from "./spawn.js";
 import { resolveCombatAt } from "./combat.js";
 import { runEnemyTurn } from "./enemy-turn.js";
-import { generateFloor } from "../generation/floor.js";
+import { generateFloor, gridDimsForFloor } from "../generation/floor.js";
 import type { PlayerInput, RunState } from "../run/state.js";
+import { grantXp } from "../entities/hero.js";
 
 export type TurnResult = {
   readonly state: RunState;
@@ -172,6 +173,18 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
       currentFloor: { ...nextState.currentFloor, lattices: postLat },
     };
 
+    if (
+      nextState.currentFloor.index === 0 &&
+      !nextState.currentFloor.exitUnlocked &&
+      hasAnyChargedLattice(postLat)
+    ) {
+      events.push({ type: "EXIT_UNLOCKED" });
+      nextState = {
+        ...nextState,
+        currentFloor: { ...nextState.currentFloor, exitUnlocked: true },
+      };
+    }
+
     // 5d. Dungeon spawn — falls back to no-op if enemies filled the empties.
     const spawnResult = spawnEndOfTurnRune(nextState);
     nextState = spawnResult.state;
@@ -192,17 +205,29 @@ function transitionFloor(state: RunState, events: GameEvent[]): RunState {
   events.push({ type: "FLOOR_COMPLETED", floorIndex: completedIndex });
 
   const nextMeta = { ...state.meta, score: state.meta.score + 1000 };
+  const xpResult = grantXp(state.hero, 30);
+  if (xpResult.levelsGained > 0) {
+    events.push({ type: "HERO_LEVELED_UP", level: xpResult.hero.level, hpMax: xpResult.hero.hpMax });
+  }
 
   const nextIndex = completedIndex + 1;
   if (nextIndex >= state.config.maxFloors) {
-    return { ...state, meta: nextMeta, outcome: "win" };
+    return { ...state, meta: nextMeta, hero: xpResult.hero, outcome: "win" };
   }
 
-  const nextFloor = generateFloor(state.seed, nextIndex, state.config.gridDims);
+  const nextDims = gridDimsForFloor(nextIndex, state.config.gridDims);
+  const nextFloor = generateFloor(state.seed, nextIndex, nextDims);
   return {
     ...state,
     meta: nextMeta,
-    hero: { ...state.hero, position: nextFloor.heroStart },
+    hero: { ...xpResult.hero, position: nextFloor.heroStart },
     currentFloor: nextFloor,
   };
+}
+
+function hasAnyChargedLattice(snap: import("../world/lattice.js").LatticeSnapshot): boolean {
+  for (const lat of snap.byId.values()) {
+    if (lat.isCharged) return true;
+  }
+  return false;
 }

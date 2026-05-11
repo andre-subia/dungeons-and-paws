@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { applyInput } from "../src/sim/turn.js";
 import { type PlayerInput } from "../src/run/state.js";
 import { chebyshevPath } from "../src/sim/path.js";
-import { runeTile, STANDARD_GRID } from "../src/world/grid.js";
+import { enemyTile, runeTile, STANDARD_GRID } from "../src/world/grid.js";
 import { recomputeLattices } from "../src/world/lattice.js";
 import { makeBlankRunState } from "./_helpers.js";
 
@@ -110,7 +110,28 @@ describe("turn pipeline — full step-4 wiring", () => {
   });
 
   it("emits a RUNE_SPAWNED event after every accepted move", () => {
-    const s0 = newRun();
+    let s0 = newRun();
+    const enemies = new Map(s0.currentFloor.enemies);
+    enemies.set("e0", {
+      id: "e0",
+      templateId: "bat",
+      archetype: "hunter",
+      position: { x: 0, y: 0 },
+      hp: 1,
+      hpMax: 1,
+      attack: 0,
+      rune: "ember",
+      intent: null,
+      modifiers: [],
+    });
+    s0 = {
+      ...s0,
+      currentFloor: {
+        ...s0.currentFloor,
+        enemies,
+        grid: s0.currentFloor.grid.set({ x: 0, y: 0 }, enemyTile("e0t", "e0", "ember")),
+      },
+    };
     const { events } = applyInput(s0, {
       type: "MOVE",
       from: { x: 4, y: 4 },

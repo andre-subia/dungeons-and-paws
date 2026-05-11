@@ -19,13 +19,14 @@ function generateLegalMoves(seed: string, count: number): PlayerInput[] {
     if (state.outcome !== "in_progress") break;
     const from = state.hero.position;
     const stride = state.hero.stride;
-    const gridSize = state.currentFloor.grid.size;
+    const gridW = state.currentFloor.grid.width;
+    const gridH = state.currentFloor.grid.height;
     const candidates: Cell[] = [];
     for (let dy = -stride; dy <= stride; dy++) {
       for (let dx = -stride; dx <= stride; dx++) {
         if (dx === 0 && dy === 0) continue;
         const c = { x: from.x + dx, y: from.y + dy };
-        if (c.x < 0 || c.x >= gridSize || c.y < 0 || c.y >= gridSize) continue;
+        if (c.x < 0 || c.x >= gridW || c.y < 0 || c.y >= gridH) continue;
         candidates.push(c);
       }
     }

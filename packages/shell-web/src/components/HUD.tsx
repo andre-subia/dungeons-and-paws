@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RUNES, type LatticeKind } from "@gridlore/engine";
+import { RUNES, xpToNextLevel, type LatticeKind } from "@gridlore/engine";
 import { useRunStore } from "../state/store.js";
 import { subscribeLocaleChange, t, tRune } from "../i18n.js";
 
@@ -10,7 +10,7 @@ export function HUD() {
   const events = useRunStore((s) => s.lastEvents);
   const lastEvent = events[events.length - 1];
 
-  const { hero, currentFloor, meta, turn, config, outcome } = state;
+  const { hero, currentFloor, meta, turn, outcome } = state;
   const lattices = currentFloor.lattices;
   const chargedCount = Array.from(lattices.byId.values()).filter((l) => l.isCharged).length;
   const totalLattices = lattices.byId.size;
@@ -50,7 +50,7 @@ export function HUD() {
         <span>🛡&nbsp;{hero.armor}</span>
         <span>🪙&nbsp;{meta.gold}</span>
         <span>
-          {t("hud.floorAbbr")}&nbsp;{currentFloor.index + 1}/{config.maxFloors}
+          {t("hud.floorAbbr")}&nbsp;{currentFloor.index + 1}
         </span>
         <span>
           {t("hud.turnAbbr")}&nbsp;{turn}
@@ -134,8 +134,41 @@ export function HUD() {
           fontFamily: "ui-monospace, monospace",
         }}
       >
-        <div style={{ fontSize: 16, letterSpacing: "0.06em" }}>
-          {t("hud.floorLabel")}&nbsp;{currentFloor.index + 1}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 170 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+            <div style={{ fontSize: 16, letterSpacing: "0.06em" }}>
+              {t("hud.floorLabel")}&nbsp;{currentFloor.index + 1}
+            </div>
+            <div style={{ fontSize: 16, letterSpacing: "0.06em" }}>
+              {t("hud.levelLabel")}&nbsp;{hero.level}
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 10, opacity: 0.7, width: 30 }}>{t("hud.xpLabel")}</div>
+            <div
+              style={{
+                flex: 1,
+                height: 10,
+                background: "#1a1a2a",
+                border: "1px solid #2a2a3e",
+                borderRadius: 999,
+                overflow: "hidden",
+              }}
+              title={`${hero.xp}/${xpToNextLevel(hero.level)}`}
+            >
+              <div
+                style={{
+                  width: `${Math.round((hero.xp / xpToNextLevel(hero.level)) * 100)}%`,
+                  height: "100%",
+                  background: "#ffd95a",
+                  opacity: 0.9,
+                }}
+              />
+            </div>
+            <div style={{ fontSize: 10, opacity: 0.7, width: 56, textAlign: "right" }}>
+              {hero.xp}/{xpToNextLevel(hero.level)}
+            </div>
+          </div>
         </div>
         <div style={{ fontSize: 16, letterSpacing: "0.06em" }}>
           {t("hud.scoreLabel")}&nbsp;{meta.score}
@@ -181,12 +214,13 @@ function Overlay({ title, tone }: { title: string; tone: "win" | "death" }) {
 function LatticeStrip() {
   const state = useRunStore((s) => s.state);
   const lattices = state.currentFloor.lattices;
-  const gridSize = state.currentFloor.grid.size;
+  const gridW = state.currentFloor.grid.width;
+  const gridH = state.currentFloor.grid.height;
   const chamberCount = state.currentFloor.grid.chamberCount;
 
   const groups: { kind: LatticeKind; label: string; count: number }[] = [
-    { kind: "row", label: t("hud.rowsAbbr"), count: gridSize },
-    { kind: "column", label: t("hud.colsAbbr"), count: gridSize },
+    { kind: "row", label: t("hud.rowsAbbr"), count: gridH },
+    { kind: "column", label: t("hud.colsAbbr"), count: gridW },
     { kind: "chamber", label: t("hud.chambersAbbr"), count: chamberCount },
   ];
 
@@ -274,6 +308,8 @@ function formatEvent(e: NonNullable<ReturnType<typeof useRunStore.getState>["las
       return t("event.enemyDamaged", { hp: e.hpAfter });
     case "ENEMY_KILLED":
       return t("event.enemyKilled");
+    case "HERO_LEVELED_UP":
+      return t("event.heroLeveledUp", { level: e.level, hpMax: e.hpMax });
     case "HERO_DAMAGED":
       return t("event.heroDamaged", { amount: e.amount });
     case "HERO_DIED":

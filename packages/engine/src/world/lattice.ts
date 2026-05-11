@@ -62,7 +62,7 @@ export function recomputeLattices(
   const newlyCharged: LatticeState[] = [];
 
   // Rows
-  for (let y = 0; y < grid.size; y++) {
+  for (let y = 0; y < grid.height; y++) {
     const tiles = grid.rowAt(y);
     const id = latticeId("row", y);
     const state = buildLattice(id, "row", y, tiles, previous);
@@ -71,7 +71,7 @@ export function recomputeLattices(
   }
 
   // Columns
-  for (let x = 0; x < grid.size; x++) {
+  for (let x = 0; x < grid.width; x++) {
     const tiles = grid.colAt(x);
     const id = latticeId("column", x);
     const state = buildLattice(id, "column", x, tiles, previous);

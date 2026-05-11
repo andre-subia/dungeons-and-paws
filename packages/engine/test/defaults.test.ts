@@ -8,7 +8,8 @@ describe("default run config", () => {
   it("uses SMALL_GRID (3×3)", () => {
     expect(DEFAULT_RUN_CONFIG.gridDims).toEqual(SMALL_GRID);
     const state = makeInitialRunState({ seed: "DEF-01" });
-    expect(state.currentFloor.grid.size).toBe(3);
+    expect(state.currentFloor.grid.width).toBe(3);
+    expect(state.currentFloor.grid.height).toBe(3);
   });
 
   it("hero stride is 1", () => {

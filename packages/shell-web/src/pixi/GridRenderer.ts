@@ -123,18 +123,19 @@ export class GridRenderer {
     const h = canvas.clientHeight || canvas.height;
     const availW = Math.max(0, w - BOARD_PADDING * 2);
     const availH = Math.max(0, h - BOARD_PADDING * 2);
-    const gridSize = this.currentState.currentFloor.grid.size;
+    const gridW = this.currentState.currentFloor.grid.width;
+    const gridH = this.currentState.currentFloor.grid.height;
 
     // Pick the largest cell width that satisfies both axes.
-    const maxCellW = availW / gridSize;
-    const maxCellH = availH / gridSize;
+    const maxCellW = availW / gridW;
+    const maxCellH = availH / gridH;
     const cellW = Math.floor(Math.min(maxCellW, maxCellH * CARD_ASPECT));
     const cellH = Math.floor(cellW / CARD_ASPECT);
     this.cellWidth = cellW;
     this.cellHeight = cellH;
 
-    const boardW = cellW * gridSize;
-    const boardH = cellH * gridSize;
+    const boardW = cellW * gridW;
+    const boardH = cellH * gridH;
     this.board.position.set(
       Math.round((w - boardW) / 2),
       Math.round((h - boardH) / 2),
@@ -158,8 +159,8 @@ export class GridRenderer {
     const exitUnlocked = state.currentFloor.exitUnlocked;
     const { cardW, cardH, marginX, marginY, radius } = this.cardDims();
 
-    for (let y = 0; y < grid.size; y++) {
-      for (let x = 0; x < grid.size; x++) {
+    for (let y = 0; y < grid.height; y++) {
+      for (let x = 0; x < grid.width; x++) {
         const tile = grid.get({ x, y });
         const isExit = tile.kind === "exit";
         const isEnemy = tile.kind === "enemy";
@@ -421,7 +422,7 @@ export class GridRenderer {
       for (let dx = -stride; dx <= stride; dx++) {
         if (dx === 0 && dy === 0) continue;
         const c: Cell = { x: hero.position.x + dx, y: hero.position.y + dy };
-        if (c.x < 0 || c.x >= grid.size || c.y < 0 || c.y >= grid.size) continue;
+        if (c.x < 0 || c.x >= grid.width || c.y < 0 || c.y >= grid.height) continue;
         if (chebyshev(hero.position, c) > stride) continue;
         const tile = grid.get(c);
         if (tile.anchored) continue;

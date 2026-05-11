@@ -8,8 +8,8 @@ describe("floor advance + win", () => {
   it("generateFloor produces a floor with heroStart, exitCell and an exit tile", () => {
     const f = generateFloor("ADV-01", 0, PUZZLE_GRID);
     expect(f.index).toBe(0);
-    expect(f.heroStart).toEqual({ x: 0, y: PUZZLE_GRID.size - 1 });
-    expect(f.exitCell).toEqual({ x: PUZZLE_GRID.size - 1, y: 0 });
+    expect(f.heroStart).toEqual({ x: 0, y: PUZZLE_GRID.height - 1 });
+    expect(f.exitCell).toEqual({ x: PUZZLE_GRID.width - 1, y: 0 });
     expect(f.grid.get(f.exitCell).kind).toBe("exit");
   });
 

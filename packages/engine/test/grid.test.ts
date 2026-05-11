@@ -15,18 +15,22 @@ function makeGrid() {
 describe("Grid", () => {
   it("constructs a 9x9 with 81 empty tiles", () => {
     const g = makeGrid();
-    expect(g.size).toBe(9);
-    expect(g.chamberSize).toBe(3);
+    expect(g.width).toBe(9);
+    expect(g.height).toBe(9);
+    expect(g.chamberWidth).toBe(3);
+    expect(g.chamberHeight).toBe(3);
     let count = 0;
     for (const _ of g.each()) count++;
     expect(count).toBe(81);
   });
 
-  it("supports puzzle dimensions (6x6 with 3x3 chambers)", () => {
+  it("supports puzzle dimensions (6x6 with a single chamber)", () => {
     const g = Grid.empty(PUZZLE_GRID, (i) => emptyTile(`p${i}`));
-    expect(g.size).toBe(6);
-    expect(g.chamberSize).toBe(3);
-    expect(g.chamberCount).toBe(4);
+    expect(g.width).toBe(6);
+    expect(g.height).toBe(6);
+    expect(g.chamberWidth).toBe(6);
+    expect(g.chamberHeight).toBe(6);
+    expect(g.chamberCount).toBe(1);
   });
 
   it("rejects out-of-bounds get", () => {

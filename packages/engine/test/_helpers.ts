@@ -40,7 +40,7 @@ export function makeBlankRunState(opts: BlankRunOpts = {}): RunState {
       enemies: new Map(),
       lattices: recomputeLattices(grid),
       heroStart: heroSpawn,
-      exitCell: { x: dims.size - 1, y: dims.size - 1 },
+      exitCell: { x: dims.width - 1, y: dims.height - 1 },
       exitUnlocked: true,
     },
   };

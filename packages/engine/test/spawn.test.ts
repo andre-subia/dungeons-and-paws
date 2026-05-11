@@ -5,13 +5,31 @@ import { recomputeLattices } from "../src/world/lattice.js";
 import { RUNES, type Rune } from "../src/core/types.js";
 import { makeBlankRunState } from "./_helpers.js";
 
-function emptyRun(seed: string) {
+function runWithEnemy(seed: string) {
+  const s = makeBlankRunState({ seed, heroSpawn: { x: 0, y: 0 }, dims: STANDARD_GRID });
+  const enemies = new Map(s.currentFloor.enemies);
+  enemies.set("e0", {
+    id: "e0",
+    templateId: "bat",
+    archetype: "hunter",
+    position: { x: 8, y: 8 },
+    hp: 1,
+    hpMax: 1,
+    attack: 0,
+    rune: "ember",
+    intent: null,
+    modifiers: [],
+  });
+  return { ...s, currentFloor: { ...s.currentFloor, enemies } };
+}
+
+function runNoEnemies(seed: string) {
   return makeBlankRunState({ seed, heroSpawn: { x: 0, y: 0 }, dims: STANDARD_GRID });
 }
 
 describe("spawnEndOfTurnRune", () => {
   it("places exactly one rune in an empty cell and emits RUNE_SPAWNED", () => {
-    const state = emptyRun("GRD-SP-01");
+    const state = runWithEnemy("GRD-SP-01");
     const result = spawnEndOfTurnRune(state);
     const spawned = result.events.filter((e) => e.type === "RUNE_SPAWNED");
     expect(spawned).toHaveLength(1);
@@ -24,7 +42,7 @@ describe("spawnEndOfTurnRune", () => {
   });
 
   it("never spawns under the hero", () => {
-    let state = emptyRun("GRD-SP-02");
+    let state = runWithEnemy("GRD-SP-02");
     state = { ...state, hero: { ...state.hero, position: { x: 4, y: 4 } } };
     for (let i = 0; i < 30; i++) {
       const result = spawnEndOfTurnRune({ ...state, turn: i });
@@ -33,15 +51,22 @@ describe("spawnEndOfTurnRune", () => {
   });
 
   it("is deterministic across runs with the same (seed, turn)", () => {
-    const a = spawnEndOfTurnRune(emptyRun("GRD-SP-DET"));
-    const b = spawnEndOfTurnRune(emptyRun("GRD-SP-DET"));
+    const a = spawnEndOfTurnRune(runWithEnemy("GRD-SP-DET"));
+    const b = spawnEndOfTurnRune(runWithEnemy("GRD-SP-DET"));
     const aSpawn = a.events.find((e) => e.type === "RUNE_SPAWNED");
     const bSpawn = b.events.find((e) => e.type === "RUNE_SPAWNED");
     expect(aSpawn).toEqual(bSpawn);
   });
 
+  it("does not spawn when there are no enemies left", () => {
+    const state = runNoEnemies("GRD-SP-NOENEMY");
+    const result = spawnEndOfTurnRune(state);
+    expect(result.state).toBe(state);
+    expect(result.events).toEqual([]);
+  });
+
   it("returns the input state when grid has no empty cells", () => {
-    let state = emptyRun("GRD-SP-FULL");
+    let state = runWithEnemy("GRD-SP-FULL");
     let g = state.currentFloor.grid;
     let i = 0;
     for (const { cell } of g.each()) {
@@ -70,7 +95,7 @@ describe("spawnEndOfTurnRune", () => {
     let total = 0;
     let emberCount = 0;
     for (let i = 0; i < 200; i++) {
-      let s = emptyRun(`GRD-SP-BIAS-${i}`);
+      let s = runWithEnemy(`GRD-SP-BIAS-${i}`);
       s = { ...s, hero: { ...s.hero, position: { x: 8, y: 8 } }, turn: i };
       let g = s.currentFloor.grid;
       let xPos = 0;

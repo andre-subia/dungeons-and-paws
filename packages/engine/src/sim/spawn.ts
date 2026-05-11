@@ -39,6 +39,13 @@ const KEYSTONE_BIAS_WEIGHT = 6;
 const BASE_WEIGHT = 1;
 
 export function spawnEndOfTurnRune(state: RunState): ResolveResult {
+  if (
+    state.currentFloor.enemies.size === 0 &&
+    (state.currentFloor.index !== 0 || state.currentFloor.exitUnlocked)
+  ) {
+    return { state, events: [] };
+  }
+
   const empties: Cell[] = [];
   for (const { cell, tile } of state.currentFloor.grid.each()) {
     if (tile.kind !== "empty") continue;

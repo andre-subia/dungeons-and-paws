@@ -18,6 +18,7 @@ import type { Cell } from "../core/types.js";
 import type { GameEvent } from "../core/events.js";
 import { emptyTile } from "../world/grid.js";
 import type { RunState } from "../run/state.js";
+import { grantXp } from "../entities/hero.js";
 
 export type ResolveResult = {
   readonly state: RunState;
@@ -35,6 +36,12 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
   let nextHero = state.hero;
   let nextMeta = state.meta;
   nextMeta = { ...nextMeta, score: nextMeta.score + 10 };
+
+  const xpResult = grantXp(nextHero, 2);
+  nextHero = xpResult.hero;
+  if (xpResult.levelsGained > 0) {
+    events.push({ type: "HERO_LEVELED_UP", level: nextHero.level, hpMax: nextHero.hpMax });
+  }
 
   switch (tile.rune) {
     case "tide": {
