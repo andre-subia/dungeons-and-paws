@@ -1,0 +1,23 @@
+{
+  "name": "@gridlore/tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Developer CLI for GRIDLORE — seed exploration, batch generation, debug.",
+  "type": "module",
+  "bin": {
+    "gridlore": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "test": "echo \"no tests yet\" && exit 0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gridlore/engine": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "@types/node": "^22.9.0"
+  }
+}
