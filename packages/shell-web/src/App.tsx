@@ -315,7 +315,9 @@ export function App() {
             pointerEvents: "none",
           }}
         >
-          <span style={{ opacity: 0.75, letterSpacing: 0 }}>{`P${floorIndex + 1}`}</span>
+          <span style={{ letterSpacing: 0 }}>
+            {t("hud.floorLabel")}&nbsp;{floorIndex + 1}
+          </span>
           <span>{t("app.title")}</span>
           <span style={{ letterSpacing: 0 }}>{`🏆 ${score}`}</span>
         </div>

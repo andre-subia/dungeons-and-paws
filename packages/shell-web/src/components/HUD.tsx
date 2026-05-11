@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RUNES, xpToNextLevel, type LatticeKind } from "@gridlore/engine";
 import { useRunStore } from "../state/store.js";
 import { subscribeLocaleChange, t, tRune } from "../i18n.js";
@@ -12,6 +12,8 @@ export function HUD() {
   const events = useRunStore((s) => s.lastEvents);
   const lastEvent = pickPrimaryEvent(events);
   const [invOpen, setInvOpen] = useState(false);
+  const ignoreInvClickRef = useRef(false);
+  const bagSwipeRef = useRef<{ pointerId: number; startX: number; startY: number; active: boolean } | null>(null);
 
   const { hero, currentFloor, meta, turn, outcome } = state;
   const lattices = currentFloor.lattices;
@@ -25,6 +27,52 @@ export function HUD() {
     window.addEventListener("ui:toggleInventory", onToggle);
     return () => window.removeEventListener("ui:toggleInventory", onToggle);
   }, []);
+
+  function openInventory() {
+    setInvOpen(true);
+  }
+
+  function closeInventory() {
+    setInvOpen(false);
+  }
+
+  function onBagPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    if (e.pointerType === "mouse") return;
+    if (bagSwipeRef.current?.active) return;
+    bagSwipeRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, active: true };
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+  }
+
+  function onBagPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const s = bagSwipeRef.current;
+    if (!s || !s.active || s.pointerId !== e.pointerId) return;
+    const dx = e.clientX - s.startX;
+    const dy = e.clientY - s.startY;
+    const MIN_UP_PX = 22;
+    const MAX_SLOP_PX = 48;
+    if (dy < -MIN_UP_PX && Math.abs(dx) <= MAX_SLOP_PX) {
+      ignoreInvClickRef.current = true;
+      bagSwipeRef.current = null;
+      e.preventDefault();
+      openInventory();
+    }
+  }
+
+  function onBagPointerUp(e: React.PointerEvent<HTMLButtonElement>) {
+    const s = bagSwipeRef.current;
+    if (!s || s.pointerId !== e.pointerId) return;
+    bagSwipeRef.current = null;
+  }
+
+  function onBagClick() {
+    if (ignoreInvClickRef.current) {
+      ignoreInvClickRef.current = false;
+      return;
+    }
+    openInventory();
+  }
 
   return (
     <div
@@ -159,7 +207,11 @@ export function HUD() {
           </div>
         </div>
         <button
-          onClick={() => setInvOpen(true)}
+          onClick={onBagClick}
+          onPointerDown={onBagPointerDown}
+          onPointerMove={onBagPointerMove}
+          onPointerUp={onBagPointerUp}
+          onPointerCancel={onBagPointerUp}
           style={{
             display: "flex",
             alignItems: "baseline",
@@ -172,6 +224,7 @@ export function HUD() {
             cursor: "pointer",
             opacity: 0.95,
             fontFamily: "inherit",
+            touchAction: "none",
           }}
           title={t("inventory.open")}
         >
@@ -194,7 +247,7 @@ export function HUD() {
         <InventorySheet
           hero={hero}
           gold={meta.gold}
-          onClose={() => setInvOpen(false)}
+          onClose={closeInventory}
           onUsePotion={() => usePotion()}
         />
       )}
@@ -214,11 +267,54 @@ function InventorySheet({
   onUsePotion: () => void;
 }) {
   const canUsePotion = hero.potions > 0 && hero.hp < hero.hpMax;
+  const [phase, setPhase] = useState<"enter" | "open" | "exit">("enter");
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const swipeCloseRef = useRef<{ pointerId: number; startX: number; startY: number; startScrollTop: number } | null>(null);
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setPhase("open"));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  function requestClose() {
+    if (phase === "exit") return;
+    setPhase("exit");
+    window.setTimeout(() => onClose(), 170);
+  }
+
+  function onSheetPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse") return;
+    if (!e.isPrimary) return;
+    const scrollTop = sheetRef.current?.scrollTop ?? 0;
+    swipeCloseRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, startScrollTop: scrollTop };
+  }
+
+  function onSheetPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const s = swipeCloseRef.current;
+    if (!s || s.pointerId !== e.pointerId) return;
+    if (s.startScrollTop > 0) return;
+
+    const dx = e.clientX - s.startX;
+    const dy = e.clientY - s.startY;
+    const MIN_DOWN_PX = 26;
+    const MAX_SLOP_PX = 56;
+    if (dy > MIN_DOWN_PX && Math.abs(dx) <= MAX_SLOP_PX) {
+      swipeCloseRef.current = null;
+      e.preventDefault();
+      requestClose();
+    }
+  }
+
+  function onSheetPointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+    const s = swipeCloseRef.current;
+    if (!s || s.pointerId !== e.pointerId) return;
+    swipeCloseRef.current = null;
+  }
 
   return (
     <div
       data-swipe-exempt="true"
-      onClick={onClose}
+      onClick={requestClose}
       style={{
         position: "fixed",
         inset: 0,
@@ -227,10 +323,17 @@ function InventorySheet({
         alignItems: "end",
         pointerEvents: "auto",
         zIndex: 6,
+        opacity: phase === "open" ? 1 : 0,
+        transition: "opacity 160ms ease-out",
       }}
     >
       <div
+        ref={sheetRef}
         onClick={(e) => e.stopPropagation()}
+        onPointerDown={onSheetPointerDown}
+        onPointerMove={onSheetPointerMove}
+        onPointerUp={onSheetPointerEnd}
+        onPointerCancel={onSheetPointerEnd}
         style={{
           background: "#11111c",
           borderTop: "1px solid #2a2a3e",
@@ -239,6 +342,10 @@ function InventorySheet({
           maxHeight: "70vh",
           overflowY: "auto",
           boxSizing: "border-box",
+          transform: phase === "open" ? "translateY(0)" : "translateY(14px)",
+          transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)",
+          willChange: "transform",
+          touchAction: "pan-y",
         }}
       >
         <div
@@ -255,7 +362,7 @@ function InventorySheet({
             <span style={{ fontSize: 14, letterSpacing: "0.06em" }}>{t("inventory.title")}</span>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             style={{
               background: "transparent",
               color: "#e9e7d8",

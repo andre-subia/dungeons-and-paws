@@ -24,7 +24,10 @@ const DICTS: Record<Locale, Dict> = {
     "help.section.move.body":
       "Tap a card with a blue border to move there. You move one cell per turn — diagonals included.\n" +
       "Tap an enemy card to attack instead of moving.\n" +
-      "If a 🔑 appears, tap its tile to step onto it and pick it up.",
+      "If a 🔑 appears, tap its tile to step onto it and pick it up.\n" +
+      "\n" +
+      "PC controls: WASD or arrow keys. Press B to open the 🎒 bag.\n" +
+      "Mobile controls: swipe anywhere to move. Swipe up on 🎒 to open the bag (swipe down to close).",
     "help.section.cat.title": "YOUR CAT 🐱",
     "help.section.cat.body":
       "♥ HP — health, you die at 0\n" +
@@ -48,6 +51,17 @@ const DICTS: Record<Locale, Dict> = {
       "HUD legend: R = row, C = column, CH = chamber.\n" +
       "Each little box is one lattice and shows unique-rune progress: filled/needed.\n" +
       "Example: R 2/3 means that row currently contains 2 different runes, and needs 3 to charge.\n" +
+      "\n" +
+      "Visual example (one rune away):\n" +
+      "+---+---+---+\n" +
+      "| E | T |   |\n" +
+      "+---+---+---+\n" +
+      "|   |   |   |\n" +
+      "+---+---+---+\n" +
+      "|   |   |   |\n" +
+      "+---+---+---+\n" +
+      "Legend: E=🔥 Ember, T=💧 Tide, B=🦴 Bone, L=🌿 Bramble.\n" +
+      "That top row is at 2/3 (missing 1 different rune). If B spawns in the empty spot, it becomes 3/3 and charges.\n" +
       "\n" +
       "Step-by-step example (3×3):\n" +
       "  1) Look at the HUD. Find a row/column that is at 2/3.\n" +
@@ -191,7 +205,10 @@ const DICTS: Record<Locale, Dict> = {
     "help.section.move.body":
       "Toca una carta con borde azul para moverte. Te mueves una casilla por turno — diagonales incluidas.\n" +
       "Toca a un enemigo para atacarlo en vez de moverte.\n" +
-      "Si aparece una 🔑, tócala para pisarla y recogerla.",
+      "Si aparece una 🔑, tócala para pisarla y recogerla.\n" +
+      "\n" +
+      "Controles PC: WASD o flechas. Presiona B para abrir la 🎒 mochila.\n" +
+      "Controles mobile: swipe en cualquier parte para moverte. Swipe hacia arriba sobre 🎒 para abrir la mochila (swipe hacia abajo para cerrar).",
     "help.section.cat.title": "TU GATO 🐱",
     "help.section.cat.body":
       "♥ HP — vida, mueres en 0\n" +
@@ -215,6 +232,17 @@ const DICTS: Record<Locale, Dict> = {
       "Leyenda HUD: F = fila, C = columna, CÁM = cámara.\n" +
       "Cada cuadrito es una lattice y muestra progreso de runas distintas: actual/necesario.\n" +
       "Ejemplo: F 2/3 significa que esa fila tiene 2 runas diferentes, y necesita 3 para cargarse.\n" +
+      "\n" +
+      "Ejemplo visual (falta 1 runa):\n" +
+      "+---+---+---+\n" +
+      "| E | T |   |\n" +
+      "+---+---+---+\n" +
+      "|   |   |   |\n" +
+      "+---+---+---+\n" +
+      "|   |   |   |\n" +
+      "+---+---+---+\n" +
+      "Leyenda: E=🔥 Brasa, T=💧 Marea, B=🦴 Hueso, L=🌿 Zarza.\n" +
+      "Esa fila de arriba está en 2/3 (falta 1 runa distinta). Si aparece B en la casilla vacía, pasa a 3/3 y se carga.\n" +
       "\n" +
       "Ejemplo paso a paso (tablero 3×3):\n" +
       "  1) Mira el HUD. Busca una Fila (F) o Columna (C) que esté en 2/3.\n" +
@@ -358,7 +386,10 @@ const DICTS: Record<Locale, Dict> = {
     "help.section.move.body":
       "Toque numa carta com borda azul para se mover. Você move uma casa por turno — diagonais inclusas.\n" +
       "Toque um inimigo para atacar em vez de se mover.\n" +
-      "Se aparecer uma 🔑, toque nela para pisar e coletar.",
+      "Se aparecer uma 🔑, toque nela para pisar e coletar.\n" +
+      "\n" +
+      "Controles no PC: WASD ou setas. Aperte B para abrir a 🎒 mochila.\n" +
+      "No celular: swipe em qualquer lugar para se mover. Swipe para cima no 🎒 para abrir a mochila (swipe para baixo para fechar).",
     "help.section.cat.title": "SEU GATO 🐱",
     "help.section.cat.body":
       "♥ HP — vida, você morre em 0\n" +
@@ -382,6 +413,17 @@ const DICTS: Record<Locale, Dict> = {
       "Legenda HUD: L = linha, C = coluna, CAM = câmara.\n" +
       "Cada quadradinho é uma lattice e mostra progresso de runas diferentes: atual/necessário.\n" +
       "Exemplo: L 2/3 significa que essa linha tem 2 runas diferentes e precisa de 3 para carregar.\n" +
+      "\n" +
+      "Exemplo visual (falta 1 runa):\n" +
+      "+---+---+---+\n" +
+      "| E | T |   |\n" +
+      "+---+---+---+\n" +
+      "|   |   |   |\n" +
+      "+---+---+---+\n" +
+      "|   |   |   |\n" +
+      "+---+---+---+\n" +
+      "Legenda: E=🔥 Brasa, T=💧 Maré, B=🦴 Osso, L=🌿 Espinho.\n" +
+      "Essa linha de cima está em 2/3 (falta 1 runa diferente). Se B aparecer na casa vazia, vira 3/3 e carrega.\n" +
       "\n" +
       "Exemplo passo a passo (tabuleiro 3×3):\n" +
       "  1) Olhe o HUD. Ache uma linha (L) ou coluna (C) que esteja em 2/3.\n" +
