@@ -473,6 +473,7 @@ function Overlay({
           borderRadius: 6,
         }}
       >
+        {tone === "death" && <div style={{ fontSize: 28, lineHeight: "28px" }}>🪦</div>}
         <div>{title}</div>
         {actionLabel && onAction && (
           <button

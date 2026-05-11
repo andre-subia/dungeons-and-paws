@@ -40,12 +40,12 @@ const CARD_ASPECT = 9 / 16;
 const CARD_MARGIN_FRAC = 0.07;
 const TILE_EMOJI_SCALE = 0.52;
 const HERO_EMOJI_SCALE = 0.52;
-const ANIM_SPEED = 0.7;
-const ATTACK_LUNGE_MS = Math.round(360 / ANIM_SPEED);
-const HIT_FLASH_MS = Math.round(260 / ANIM_SPEED);
-const DAMAGE_FLOAT_MS = Math.round(560 / ANIM_SPEED);
-const LATTICE_PULSE_MS = Math.round(620 / ANIM_SPEED);
-const LATTICE_POP_MS = Math.round(520 / ANIM_SPEED);
+const DEFAULT_ANIM_SPEED = 0.7;
+const BASE_ATTACK_LUNGE_MS = 360;
+const BASE_HIT_FLASH_MS = 260;
+const BASE_DAMAGE_FLOAT_MS = 560;
+const BASE_LATTICE_PULSE_MS = 620;
+const BASE_LATTICE_POP_MS = 520;
 
 export class GridRenderer {
   private readonly app: Application;
@@ -61,6 +61,7 @@ export class GridRenderer {
   private currentState: RunState | null = null;
   private lastAnimKey: string | null = null;
   private moveHandler: MoveHandler = () => {};
+  private animSpeed = DEFAULT_ANIM_SPEED;
   private readonly activeAnimations: {
     readonly node: Container;
     elapsedMs: number;
@@ -115,6 +116,11 @@ export class GridRenderer {
 
   setMoveHandler(handler: MoveHandler): void {
     this.moveHandler = handler;
+  }
+
+  setAnimSpeed(speed: number): void {
+    if (!Number.isFinite(speed)) return;
+    this.animSpeed = clamp(speed, 0.2, 2);
   }
 
   resize(): void {
@@ -257,7 +263,7 @@ export class GridRenderer {
     lunge.position.set(fromPx.x, fromPx.y);
     this.animationLayer.addChild(lunge);
 
-    const durationMs = ATTACK_LUNGE_MS;
+    const durationMs = this.animMs(BASE_ATTACK_LUNGE_MS);
     const update = (t: number) => {
       const phase = t < 0.55 ? t / 0.55 : 1 - (t - 0.55) / 0.45;
       const eased = easeOutCubic(Math.max(0, Math.min(1, phase)));
@@ -281,7 +287,7 @@ export class GridRenderer {
     g.roundRect(x, y, cardW, cardH, radius).fill({ color: 0xff3b3b, alpha: 0.35 });
     g.alpha = 0;
     this.animationLayer.addChild(g);
-    const durationMs = HIT_FLASH_MS;
+    const durationMs = this.animMs(BASE_HIT_FLASH_MS);
     const update = (t: number) => {
       const peak = Math.sin(Math.PI * t);
       g.alpha = 0.55 * peak;
@@ -304,7 +310,7 @@ export class GridRenderer {
     dmg.anchor.set(0.5);
     dmg.position.set(c.x, c.y - this.cardDims().cardH * 0.12);
     this.animationLayer.addChild(dmg);
-    const durationMs = DAMAGE_FLOAT_MS;
+    const durationMs = this.animMs(BASE_DAMAGE_FLOAT_MS);
     const update = (t: number) => {
       dmg.alpha = 1 - t;
       dmg.position.set(c.x, c.y - this.cardDims().cardH * (0.12 + 0.22 * easeOutCubic(t)));
@@ -353,7 +359,7 @@ export class GridRenderer {
       group.scale.set(s);
       emoji.scale.set(1 + 0.18 * easeOutCubic(peak));
     };
-    this.activeAnimations.push({ node: group, elapsedMs: 0, durationMs: LATTICE_PULSE_MS, update: pulseUpdate });
+    this.activeAnimations.push({ node: group, elapsedMs: 0, durationMs: this.animMs(BASE_LATTICE_PULSE_MS), update: pulseUpdate });
 
     this.latticePopRing(center, color);
   }
@@ -372,7 +378,11 @@ export class GridRenderer {
       ring.circle(0, 0, r).stroke({ color, width: 4, alpha: 1 - t });
       ring.alpha = 1 - t;
     };
-    this.activeAnimations.push({ node: ring, elapsedMs: 0, durationMs: LATTICE_POP_MS, update });
+    this.activeAnimations.push({ node: ring, elapsedMs: 0, durationMs: this.animMs(BASE_LATTICE_POP_MS), update });
+  }
+
+  private animMs(baseMs: number): number {
+    return Math.max(1, Math.round(baseMs / this.animSpeed));
   }
 
   private cellsCenterPx(cells: readonly Cell[]): { x: number; y: number } {
@@ -873,4 +883,8 @@ function lerp(a: number, b: number, t: number): number {
 function easeOutCubic(t: number): number {
   const u = 1 - t;
   return 1 - u * u * u;
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
 }

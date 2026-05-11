@@ -16,9 +16,38 @@ const HELP_SECTIONS = [
   "tips",
 ] as const;
 
+const ANIM_SPEED_STORAGE_KEY = "gridlore:animSpeed";
+const HAPTICS_STORAGE_KEY = "gridlore:hapticsEnabled";
+
+function readAnimSpeed(): number {
+  try {
+    const raw = localStorage.getItem(ANIM_SPEED_STORAGE_KEY);
+    const n = raw == null ? NaN : Number(raw);
+    if (!Number.isFinite(n)) return 0.7;
+    return Math.max(0.2, Math.min(2, n));
+  } catch {
+    return 0.7;
+  }
+}
+
+function readBool(key: string, fallback: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    if (raw === "1" || raw === "true") return true;
+    if (raw === "0" || raw === "false") return false;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
+  const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, true));
   const score = useRunStore((s) => s.state.meta.score);
   const floorIndex = useRunStore((s) => s.state.currentFloor.index);
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
@@ -243,11 +272,19 @@ export function App() {
     };
   }, []);
 
-  function cycleLocale() {
-    const cur = getLocale();
-    const idx = LOCALES.indexOf(cur);
-    const next = LOCALES[(idx + 1) % LOCALES.length]!;
-    setLocale(next);
+  function updateAnimSpeed(v: number) {
+    const clamped = Math.max(0.2, Math.min(2, v));
+    setAnimSpeed(clamped);
+    try {
+      localStorage.setItem(ANIM_SPEED_STORAGE_KEY, String(clamped));
+    } catch {}
+  }
+
+  function updateHapticsEnabled(v: boolean) {
+    setHapticsEnabled(v);
+    try {
+      localStorage.setItem(HAPTICS_STORAGE_KEY, v ? "1" : "0");
+    } catch {}
   }
 
   function localeFlag(locale: ReturnType<typeof getLocale>): string {
@@ -287,8 +324,8 @@ export function App() {
         }}
       >
         <button
-          onClick={cycleLocale}
-          title={t("header.langLabel")}
+          onClick={() => setSettingsOpen(true)}
+          title={t("header.settingsLabel")}
           style={{
             width: 34,
             height: 22,
@@ -303,7 +340,7 @@ export function App() {
             opacity: 0.9,
           }}
         >
-          {localeFlag(getLocale())}
+          ⚙️
         </button>
         <div
           style={{
@@ -341,7 +378,7 @@ export function App() {
           📜
         </button>
       </header>
-      <GridView />
+      <GridView animSpeed={animSpeed} />
       <HUD />
 
       {helpOpen && (
@@ -456,6 +493,109 @@ export function App() {
                   )}
                 </section>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div
+          onClick={() => setSettingsOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(11, 11, 20, 0.72)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 11,
+            padding: 16,
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(520px, 100%)",
+              background: "#11111c",
+              border: "1px solid #2a2a3e",
+              borderRadius: 10,
+              padding: "14px 14px 12px",
+              color: "#e9e7d8",
+              fontFamily: "ui-monospace, monospace",
+              letterSpacing: 0,
+              opacity: 0.98,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <div style={{ fontWeight: 700 }}>{t("settings.title")}</div>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                style={{
+                  background: "transparent",
+                  color: "#e9e7d8",
+                  border: "1px solid #2a2a3e",
+                  borderRadius: 6,
+                  padding: "2px 8px",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  lineHeight: "18px",
+                  opacity: 0.9,
+                }}
+              >
+                {t("settings.close")}
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gap: 10, fontSize: 12, lineHeight: "18px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ opacity: 0.85 }}>{t("settings.language")}</div>
+                <select
+                  value={getLocale()}
+                  onChange={(e) => setLocale(e.target.value as (typeof LOCALES)[number])}
+                  style={{
+                    background: "#11111c",
+                    color: "#e9e7d8",
+                    border: "1px solid #2a2a3e",
+                    borderRadius: 8,
+                    padding: "6px 8px",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  {LOCALES.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {localeFlag(loc)} {loc.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+                  <div style={{ opacity: 0.85 }}>{t("settings.animSpeed")}</div>
+                  <div style={{ opacity: 0.7, letterSpacing: 0 }}>{animSpeed.toFixed(2)}</div>
+                </div>
+                <input
+                  type="range"
+                  min={0.2}
+                  max={2}
+                  step={0.05}
+                  value={animSpeed}
+                  onChange={(e) => updateAnimSpeed(Number(e.target.value))}
+                  style={{ width: "100%" }}
+                />
+              </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={hapticsEnabled}
+                  onChange={(e) => updateHapticsEnabled(e.target.checked)}
+                />
+                <span style={{ opacity: 0.85 }}>{t("settings.haptics")}</span>
+              </label>
             </div>
           </div>
         </div>

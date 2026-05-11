@@ -8,7 +8,7 @@ import { subscribeLocaleChange } from "../i18n.js";
  * for size changes (so flex-layout shifts resize the canvas), and
  * dispatches moves via the store when the renderer reports a tap.
  */
-export function GridView() {
+export function GridView({ animSpeed }: { animSpeed: number }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<GridRenderer | null>(null);
 
@@ -27,6 +27,7 @@ export function GridView() {
       }
       renderer = r;
       rendererRef.current = r;
+      r.setAnimSpeed(animSpeed);
       r.setMoveHandler((cell) => {
         useRunStore.getState().move(cell);
       });
@@ -57,6 +58,10 @@ export function GridView() {
       rendererRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    rendererRef.current?.setAnimSpeed(animSpeed);
+  }, [animSpeed]);
 
   return (
     <div
