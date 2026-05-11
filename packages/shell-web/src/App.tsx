@@ -138,6 +138,7 @@ export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
   const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, DEFAULT_HAPTICS_ENABLED));
   const [swipeSensitivity, setSwipeSensitivity] = useState(readSwipeSensitivity);
@@ -638,25 +639,51 @@ export function App() {
           <span>{t("app.title")}</span>
           <span style={{ letterSpacing: 0 }}>{`🏆 ${score}`}</span>
         </div>
-        <button
-          onClick={() => setHelpOpen(true)}
-          title={t("header.helpLabel")}
-          style={{
-            width: 34,
-            height: 22,
-            background: "transparent",
-            color: "#e9e7d8",
-            border: "1px solid #2a2a3e",
-            borderRadius: 6,
-            fontFamily: "inherit",
-            fontSize: 14,
-            lineHeight: "20px",
-            cursor: "pointer",
-            opacity: 0.9,
-          }}
-        >
-          📜
-        </button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            onClick={() => {
+              setSettingsOpen(false);
+              setHelpOpen(false);
+              setLeaderboardOpen(true);
+              refreshLeaderboard();
+            }}
+            title={t("header.leaderboardLabel")}
+            style={{
+              width: 34,
+              height: 22,
+              background: "transparent",
+              color: "#e9e7d8",
+              border: "1px solid #2a2a3e",
+              borderRadius: 6,
+              fontFamily: "inherit",
+              fontSize: 14,
+              lineHeight: "20px",
+              cursor: "pointer",
+              opacity: 0.9,
+            }}
+          >
+            🌎
+          </button>
+          <button
+            onClick={() => setHelpOpen(true)}
+            title={t("header.helpLabel")}
+            style={{
+              width: 34,
+              height: 22,
+              background: "transparent",
+              color: "#e9e7d8",
+              border: "1px solid #2a2a3e",
+              borderRadius: 6,
+              fontFamily: "inherit",
+              fontSize: 14,
+              lineHeight: "20px",
+              cursor: "pointer",
+              opacity: 0.9,
+            }}
+          >
+            📜
+          </button>
+        </div>
       </header>
       <GridView animSpeed={animSpeed} onMove={onGridMove} />
       <HUD playerName={playerName} />
@@ -930,42 +957,103 @@ export function App() {
               >
                 {t("settings.reset")}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div
-                style={{
-                  marginTop: 8,
-                  borderTop: "1px solid #2a2a3e",
-                  paddingTop: 10,
-                  display: "grid",
-                  gap: 6,
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", opacity: 0.8 }}>
-                  {t("settings.leaderboard")}
-                </div>
-
-                {!hasLeaderboardBackend() ? (
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>{t("settings.leaderboardNotConfigured")}</div>
-                ) : leaderboardLoading ? (
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>{t("settings.leaderboardLoading")}</div>
-                ) : leaderboardError ? (
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>{t("settings.leaderboardError")}</div>
-                ) : leaderboard.length === 0 ? (
-                  <div style={{ fontSize: 12, opacity: 0.75 }}>{t("settings.leaderboardEmpty")}</div>
-                ) : (
-                  <div style={{ display: "grid", gap: 4 }}>
-                    {leaderboard.slice(0, 10).map((e, idx) => (
-                      <div
-                        key={`${e.ts}-${e.seed}`}
-                        style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12 }}
-                      >
-                        <span style={{ opacity: 0.9 }}>{`${idx + 1}. ${e.name}`}</span>
-                        <span style={{ opacity: 0.8, letterSpacing: 0 }}>{e.score}</span>
-                      </div>
-                    ))}
-                  </div>
+      {leaderboardOpen && (
+        <div
+          onClick={() => setLeaderboardOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(11, 11, 20, 0.72)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 11,
+            padding: 16,
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(520px, 100%)",
+              background: "#11111c",
+              border: "1px solid #2a2a3e",
+              borderRadius: 10,
+              padding: "14px 14px 12px",
+              color: "#e9e7d8",
+              fontFamily: "ui-monospace, monospace",
+              letterSpacing: 0,
+              opacity: 0.98,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <div style={{ fontWeight: 700 }}>{t("leaderboard.title")}</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {hasLeaderboardBackend() && (
+                  <button
+                    onClick={refreshLeaderboard}
+                    style={{
+                      background: "transparent",
+                      color: "#e9e7d8",
+                      border: "1px solid #2a2a3e",
+                      borderRadius: 6,
+                      padding: "2px 8px",
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      fontSize: 12,
+                      lineHeight: "18px",
+                      opacity: 0.9,
+                    }}
+                  >
+                    {t("leaderboard.refresh")}
+                  </button>
                 )}
+                <button
+                  onClick={() => setLeaderboardOpen(false)}
+                  style={{
+                    background: "transparent",
+                    color: "#e9e7d8",
+                    border: "1px solid #2a2a3e",
+                    borderRadius: 6,
+                    padding: "2px 8px",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    lineHeight: "18px",
+                    opacity: 0.9,
+                  }}
+                >
+                  {t("settings.close")}
+                </button>
               </div>
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gap: 8, fontSize: 12, lineHeight: "18px" }}>
+              {!hasLeaderboardBackend() ? (
+                <div style={{ opacity: 0.75 }}>{t("settings.leaderboardNotConfigured")}</div>
+              ) : leaderboardLoading ? (
+                <div style={{ opacity: 0.75 }}>{t("settings.leaderboardLoading")}</div>
+              ) : leaderboardError ? (
+                <div style={{ opacity: 0.75 }}>{t("settings.leaderboardError")}</div>
+              ) : leaderboard.length === 0 ? (
+                <div style={{ opacity: 0.75 }}>{t("settings.leaderboardEmpty")}</div>
+              ) : (
+                <div style={{ display: "grid", gap: 6 }}>
+                  {leaderboard.slice(0, 20).map((e, idx) => (
+                    <div
+                      key={`${e.ts}-${e.seed}`}
+                      style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12 }}
+                    >
+                      <span style={{ opacity: 0.9 }}>{`${idx + 1}. ${e.name}`}</span>
+                      <span style={{ opacity: 0.8, letterSpacing: 0 }}>{e.score}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
