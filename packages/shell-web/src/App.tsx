@@ -181,21 +181,55 @@ export function App() {
             >
               {HELP_SECTIONS.map((s) => (
                 <section key={s} style={{ marginBottom: 10 }}>
-                  <div
-                    style={{
-                      fontWeight: 700,
-                      fontSize: 11,
-                      letterSpacing: 1,
-                      textTransform: "uppercase",
-                      opacity: 0.6,
-                      marginBottom: 3,
-                    }}
-                  >
-                    {t(`help.section.${s}.title`)}
-                  </div>
-                  <div style={{ whiteSpace: "pre-wrap" }}>
-                    {t(`help.section.${s}.body`)}
-                  </div>
+                  {s === "lattices" ? (
+                    <details
+                      style={{
+                        border: "1px solid #2a2a3e",
+                        borderRadius: 8,
+                        padding: "6px 8px",
+                        background: "rgba(26, 26, 42, 0.25)",
+                      }}
+                    >
+                      <summary
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 11,
+                          letterSpacing: 1,
+                          textTransform: "uppercase",
+                          opacity: 0.75,
+                          cursor: "pointer",
+                          listStyle: "none",
+                          outline: "none",
+                        }}
+                      >
+                        {t(`help.section.${s}.title`)}
+                        <span style={{ marginLeft: 8, opacity: 0.6, letterSpacing: 0, fontSize: 10 }}>
+                          {t("help.section.lattices.hint")}
+                        </span>
+                      </summary>
+                      <div style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
+                        {t(`help.section.${s}.body`)}
+                      </div>
+                    </details>
+                  ) : (
+                    <>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 11,
+                          letterSpacing: 1,
+                          textTransform: "uppercase",
+                          opacity: 0.6,
+                          marginBottom: 3,
+                        }}
+                      >
+                        {t(`help.section.${s}.title`)}
+                      </div>
+                      <div style={{ whiteSpace: "pre-wrap" }}>
+                        {t(`help.section.${s}.body`)}
+                      </div>
+                    </>
+                  )}
                 </section>
               ))}
             </div>

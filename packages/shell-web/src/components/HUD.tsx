@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { RUNES, xpToNextLevel, type LatticeKind } from "@gridlore/engine";
 import { useRunStore } from "../state/store.js";
 import { subscribeLocaleChange, t, tRune } from "../i18n.js";
+import { RUNE_EMOJI } from "../pixi/palette.js";
 
 export function HUD() {
   const [, bump] = useState(0);
@@ -305,19 +306,28 @@ function LatticeStrip() {
             {Array.from({ length: count }, (_, i) => {
               const id = `${kind}:${i}` as const;
               const lat = lattices.byId.get(id);
-              const filled = lat?.runesPresent.size ?? 0;
               const threshold = lat?.chargeThreshold ?? RUNES.length;
-              const charged = lat?.isCharged ?? false;
+              const unique = lat?.runesPresent.size ?? 0;
+              const filled = Math.min(unique, threshold);
+              const charged = (lat?.isCharged ?? false) || unique >= threshold;
+              const near = !charged && unique === threshold - 1;
+              const runes =
+                lat && unique > 0
+                  ? Array.from(lat.runesPresent)
+                      .slice(0, 9)
+                      .map((r) => RUNE_EMOJI[r])
+                      .join("")
+                  : "";
               return (
                 <span
                   key={i}
-                  title={`${id} ${filled}/${threshold}`}
+                  title={`${id} ${unique}/${threshold}${runes ? ` ${runes}` : ""}`}
                   style={{
                     display: "inline-block",
                     minWidth: 22,
                     textAlign: "center",
-                    color: charged ? "#ffd95a" : "#7a7a90",
-                    background: charged ? "#3a3a55" : "transparent",
+                    color: charged ? "#ffd95a" : near ? "#a6c7ff" : "#7a7a90",
+                    background: charged ? "#3a3a55" : near ? "#1b2433" : "transparent",
                     borderRadius: 2,
                     padding: "0 3px",
                     lineHeight: 1.4,

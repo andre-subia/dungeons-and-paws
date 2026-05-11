@@ -14,6 +14,7 @@ const DICTS: Record<Locale, Dict> = {
     "header.helpLabel": "How to play",
     "help.title": "How to play",
     "help.close": "Close",
+    "help.section.lattices.hint": "(tap to expand)",
     "help.section.goal.title": "GOAL",
     "help.section.goal.body":
       "Reach 🚪 on each floor to advance.\n" +
@@ -42,14 +43,25 @@ const DICTS: Record<Locale, Dict> = {
       "🔥 Ember · 🌿 Bramble · ⭐ Star · 🌑 Void · 🩸 Blood — consumed only (effects coming)",
     "help.section.lattices.title": "LATTICES ⚡",
     "help.section.lattices.body":
-      "Each ROW and COLUMN charges when it holds 3 different runes at once.\n" +
-      "The last rune placed becomes the KEYSTONE and triggers a bonus:\n" +
+      "Rows, columns, and chambers can CHARGE when they hold enough different runes at once (see the HUD).\n" +
+      "HUD legend: R = row, C = column, CH = chamber.\n" +
+      "Each little box is one lattice and shows unique-rune progress: filled/needed.\n" +
+      "Example: R 2/3 means that row currently contains 2 different runes, and needs 3 to charge.\n" +
+      "\n" +
+      "Step-by-step example (3×3):\n" +
+      "  1) Look at the HUD. Find a row/column that is at 2/3.\n" +
+      "  2) Those 2 runes must stay on the board. Do NOT step on them (stepping consumes runes).\n" +
+      "  3) Spend your turns moving elsewhere / fighting, so new runes keep spawning.\n" +
+      "  4) If the missing rune appears in the last empty cell of that row/column, it becomes 3/3 and CHARGES.\n" +
+      "  5) The last rune that completed 3/3 is the KEYSTONE and its bonus triggers instantly.\n" +
+      "\n" +
+      "The last rune that completes the charge becomes the KEYSTONE and triggers a bonus:\n" +
       "  💧 Tide → restore up to 5 ♥\n" +
       "  🪙 Coin → +25 🪙\n" +
       "  🦴 Bone → +5 ♥\n" +
       "  ⚙️ Iron → +5 🛡\n" +
       "  others → coming soon\n" +
-      "The HUD strip shows R / C charge progress per lattice.",
+      "Charged lattices tint the board. If a rune disappears (consumed or an enemy dies), a lattice can decharge.",
     "help.section.exit.title": "EXIT 🚪",
     "help.section.exit.body":
       "Some exits are LOCKED 🔒.\n" +
@@ -151,6 +163,7 @@ const DICTS: Record<Locale, Dict> = {
     "header.helpLabel": "Cómo jugar",
     "help.title": "Cómo jugar",
     "help.close": "Cerrar",
+    "help.section.lattices.hint": "(toca para ver)",
     "help.section.goal.title": "OBJETIVO",
     "help.section.goal.body":
       "Llega a 🚪 en cada piso para avanzar.\n" +
@@ -179,14 +192,25 @@ const DICTS: Record<Locale, Dict> = {
       "🔥 Brasa · 🌿 Zarza · ⭐ Estrella · 🌑 Vacío · 🩸 Sangre — solo se consumen (efectos próximos)",
     "help.section.lattices.title": "LATTICES ⚡",
     "help.section.lattices.body":
-      "Cada FILA y COLUMNA se carga cuando tiene 3 runas distintas al mismo tiempo.\n" +
-      "La última runa colocada es la CLAVE y dispara un bonus:\n" +
+      "Filas, columnas y cámaras pueden CARGARSE cuando tienen suficientes runas distintas al mismo tiempo (mira el HUD).\n" +
+      "Leyenda HUD: F = fila, C = columna, CÁM = cámara.\n" +
+      "Cada cuadrito es una lattice y muestra progreso de runas distintas: actual/necesario.\n" +
+      "Ejemplo: F 2/3 significa que esa fila tiene 2 runas diferentes, y necesita 3 para cargarse.\n" +
+      "\n" +
+      "Ejemplo paso a paso (tablero 3×3):\n" +
+      "  1) Mira el HUD. Busca una Fila (F) o Columna (C) que esté en 2/3.\n" +
+      "  2) Esas 2 runas deben quedarse en el tablero. NO las pises (pisar consume la runa).\n" +
+      "  3) Juega tu turno moviéndote por otra zona / peleando para que sigan apareciendo runas.\n" +
+      "  4) Si aparece la runa que falta en la última casilla libre de esa fila/columna, pasa a 3/3 y se CARGA.\n" +
+      "  5) La última runa que completó el 3/3 es la CLAVE (keystone) y el bonus se activa al instante.\n" +
+      "\n" +
+      "La última runa que completa la carga es la CLAVE y dispara un bonus:\n" +
       "  💧 Marea → recupera hasta 5 ♥\n" +
       "  🪙 Moneda → +25 🪙\n" +
       "  🦴 Hueso → +5 ♥\n" +
       "  ⚙️ Hierro → +5 🛡\n" +
       "  otras → próximamente\n" +
-      "La barra del HUD muestra el progreso F / C de cada lattice.",
+      "Las lattices cargadas tiñen el tablero. Si una runa desaparece (consumida o muere un enemigo), una lattice puede descargarse.",
     "help.section.exit.title": "SALIDA 🚪",
     "help.section.exit.body":
       "A veces la salida está BLOQUEADA 🔒.\n" +
@@ -288,6 +312,7 @@ const DICTS: Record<Locale, Dict> = {
     "header.helpLabel": "Como jogar",
     "help.title": "Como jogar",
     "help.close": "Fechar",
+    "help.section.lattices.hint": "(toque para abrir)",
     "help.section.goal.title": "OBJETIVO",
     "help.section.goal.body":
       "Chegue a 🚪 em cada andar para avançar.\n" +
@@ -316,14 +341,25 @@ const DICTS: Record<Locale, Dict> = {
       "🔥 Brasa · 🌿 Espinho · ⭐ Estrela · 🌑 Vazio · 🩸 Sangue — só são consumidas (efeitos em breve)",
     "help.section.lattices.title": "LATTICES ⚡",
     "help.section.lattices.body":
-      "Cada LINHA e COLUNA carrega quando tem 3 runas diferentes ao mesmo tempo.\n" +
-      "A última runa colocada vira CHAVE e dispara um bônus:\n" +
+      "Linhas, colunas e câmaras podem CARREGAR quando têm runas diferentes suficientes ao mesmo tempo (veja o HUD).\n" +
+      "Legenda HUD: L = linha, C = coluna, CAM = câmara.\n" +
+      "Cada quadradinho é uma lattice e mostra progresso de runas diferentes: atual/necessário.\n" +
+      "Exemplo: L 2/3 significa que essa linha tem 2 runas diferentes e precisa de 3 para carregar.\n" +
+      "\n" +
+      "Exemplo passo a passo (tabuleiro 3×3):\n" +
+      "  1) Olhe o HUD. Ache uma linha (L) ou coluna (C) que esteja em 2/3.\n" +
+      "  2) Essas 2 runas precisam ficar no tabuleiro. NÃO pise nelas (pisar consome a runa).\n" +
+      "  3) Faça seu turno em outra área / lutando para continuar gerando runas.\n" +
+      "  4) Quando a runa que falta aparecer na última casa livre, vira 3/3 e CARREGA.\n" +
+      "  5) A última runa que completou o 3/3 vira a CHAVE (keystone) e o bônus ativa na hora.\n" +
+      "\n" +
+      "A última runa que completa a carga vira CHAVE e dispara um bônus:\n" +
       "  💧 Maré → restaura até 5 ♥\n" +
       "  🪙 Moeda → +25 🪙\n" +
       "  🦴 Osso → +5 ♥\n" +
       "  ⚙️ Ferro → +5 🛡\n" +
       "  outras → em breve\n" +
-      "A faixa do HUD mostra o progresso L / C de cada lattice.",
+      "Lattices carregadas tingem o tabuleiro. Se uma runa sumir (consumida ou inimigo morre), uma lattice pode descarregar.",
     "help.section.exit.title": "SAÍDA 🚪",
     "help.section.exit.body":
       "Às vezes a saída está TRAVADA 🔒.\n" +

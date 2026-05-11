@@ -102,11 +102,11 @@ function buildLattice(
   for (const t of tiles) {
     if (t.rune !== null) runesPresent.add(t.rune);
   }
-  // Adaptive threshold: a 6-cell line can never hold more than 6 unique
-  // runes; a 9-cell line caps at the full RUNE_COUNT. This lets the same
-  // lattice system work on grids of any size.
-  const chargeThreshold = Math.min(tiles.length, RUNE_COUNT);
-  const isCharged = runesPresent.size === chargeThreshold;
+  const chargeThreshold =
+    kind === "chamber"
+      ? Math.min(Math.max(5, Math.floor(tiles.length / 4)), RUNE_COUNT)
+      : Math.min(tiles.length, RUNE_COUNT);
+  const isCharged = runesPresent.size >= chargeThreshold;
   let keystone: Rune | null = null;
 
   if (isCharged) {
