@@ -18,6 +18,7 @@
 import { SeededRNG } from "../core/rng.js";
 import {
   RUNES,
+  chebyshev,
   cellEq,
   type Cell,
   type LatticeId,
@@ -39,11 +40,25 @@ const KEYSTONE_BIAS_WEIGHT = 6;
 const BASE_WEIGHT = 1;
 
 export function spawnEndOfTurnRune(state: RunState): ResolveResult {
+  const tutorialNeedsSpawns = state.currentFloor.index === 0 && !state.currentFloor.exitUnlocked;
+
   if (
-    state.currentFloor.enemies.size === 0 &&
-    (state.currentFloor.index !== 0 || state.currentFloor.exitUnlocked)
+    !tutorialNeedsSpawns &&
+    state.currentFloor.enemies.size === 0
   ) {
     return { state, events: [] };
+  }
+
+  if (!tutorialNeedsSpawns) {
+    const heroPos = state.hero.position;
+    let anyThreatNearby = false;
+    for (const enemy of state.currentFloor.enemies.values()) {
+      if (chebyshev(enemy.position, heroPos) <= 1) {
+        anyThreatNearby = true;
+        break;
+      }
+    }
+    if (!anyThreatNearby) return { state, events: [] };
   }
 
   const empties: Cell[] = [];

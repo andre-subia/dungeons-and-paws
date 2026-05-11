@@ -57,23 +57,6 @@ export function HUD() {
           {t("hud.turnAbbr")}&nbsp;{turn}
         </span>
         <span>⚡&nbsp;{chargedCount}/{totalLattices}</span>
-        <button
-          onClick={() => reset(`GRD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`)}
-          style={{
-            background: "transparent",
-            color: "#e9e7d8",
-            border: "1px solid #2a2a3e",
-            padding: "0 0.35rem",
-            cursor: "pointer",
-            fontFamily: "inherit",
-            fontSize: 10,
-            borderRadius: 3,
-            lineHeight: "16px",
-            height: 18,
-          }}
-        >
-          {t("hud.newRun")}
-        </button>
       </div>
 
       <LatticeStrip />
@@ -196,12 +179,29 @@ export function HUD() {
       </div>
 
       {outcome === "win" && <Overlay title={t("overlay.win")} tone="win" />}
-      {outcome === "death" && <Overlay title={t("overlay.death")} tone="death" />}
+      {outcome === "death" && (
+        <Overlay
+          title={t("overlay.death")}
+          tone="death"
+          actionLabel={t("hud.newRun")}
+          onAction={() => reset(`GRD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`)}
+        />
+      )}
     </div>
   );
 }
 
-function Overlay({ title, tone }: { title: string; tone: "win" | "death" }) {
+function Overlay({
+  title,
+  tone,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  tone: "win" | "death";
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
     <div
       style={{
@@ -210,13 +210,17 @@ function Overlay({ title, tone }: { title: string; tone: "win" | "death" }) {
         background: "rgba(11, 11, 20, 0.7)",
         display: "grid",
         placeItems: "center",
-        pointerEvents: "none",
+        pointerEvents: "auto",
         zIndex: 5,
       }}
     >
       <div
         style={{
           padding: "1.5rem 2rem",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 14,
           fontSize: "1.6rem",
           letterSpacing: "0.08em",
           color: tone === "win" ? "#ffd95a" : "#ff6a6a",
@@ -225,7 +229,26 @@ function Overlay({ title, tone }: { title: string; tone: "win" | "death" }) {
           borderRadius: 6,
         }}
       >
-        {title}
+        <div>{title}</div>
+        {actionLabel && onAction && (
+          <button
+            onClick={onAction}
+            style={{
+              background: "transparent",
+              color: "#e9e7d8",
+              border: "1px solid #2a2a3e",
+              padding: "10px 14px",
+              cursor: "pointer",
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 14,
+              borderRadius: 10,
+              letterSpacing: "0.06em",
+              opacity: 0.95,
+            }}
+          >
+            {actionLabel}
+          </button>
+        )}
       </div>
     </div>
   );

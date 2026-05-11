@@ -116,7 +116,7 @@ describe("turn pipeline — full step-4 wiring", () => {
       id: "e0",
       templateId: "bat",
       archetype: "hunter",
-      position: { x: 0, y: 0 },
+      position: { x: 5, y: 4 },
       hp: 1,
       hpMax: 1,
       attack: 0,
@@ -129,7 +129,7 @@ describe("turn pipeline — full step-4 wiring", () => {
       currentFloor: {
         ...s0.currentFloor,
         enemies,
-        grid: s0.currentFloor.grid.set({ x: 0, y: 0 }, enemyTile("e0t", "e0", "ember")),
+        grid: s0.currentFloor.grid.set({ x: 5, y: 4 }, enemyTile("e0t", "e0", "ember")),
       },
     };
     const { events } = applyInput(s0, {

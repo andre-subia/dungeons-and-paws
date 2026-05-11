@@ -5,14 +5,14 @@ import { recomputeLattices } from "../src/world/lattice.js";
 import { RUNES, type Rune } from "../src/core/types.js";
 import { makeBlankRunState } from "./_helpers.js";
 
-function runWithEnemy(seed: string) {
+function runWithEnemy(seed: string, enemyPos: { x: number; y: number } = { x: 0, y: 1 }) {
   const s = makeBlankRunState({ seed, heroSpawn: { x: 0, y: 0 }, dims: STANDARD_GRID });
   const enemies = new Map(s.currentFloor.enemies);
   enemies.set("e0", {
     id: "e0",
     templateId: "bat",
     archetype: "hunter",
-    position: { x: 8, y: 8 },
+    position: enemyPos,
     hp: 1,
     hpMax: 1,
     attack: 0,
@@ -44,6 +44,29 @@ describe("spawnEndOfTurnRune", () => {
   it("never spawns under the hero", () => {
     let state = runWithEnemy("GRD-SP-02");
     state = { ...state, hero: { ...state.hero, position: { x: 4, y: 4 } } };
+    state = {
+      ...state,
+      currentFloor: {
+        ...state.currentFloor,
+        enemies: new Map([
+          [
+            "e0",
+            {
+              id: "e0",
+              templateId: "bat",
+              archetype: "hunter",
+              position: { x: 4, y: 5 },
+              hp: 1,
+              hpMax: 1,
+              attack: 0,
+              rune: "ember",
+              intent: null,
+              modifiers: [],
+            },
+          ],
+        ]),
+      },
+    };
     for (let i = 0; i < 30; i++) {
       const result = spawnEndOfTurnRune({ ...state, turn: i });
       expect(result.state.currentFloor.grid.get({ x: 4, y: 4 }).kind).toBe("empty");
@@ -95,7 +118,7 @@ describe("spawnEndOfTurnRune", () => {
     let total = 0;
     let emberCount = 0;
     for (let i = 0; i < 200; i++) {
-      let s = runWithEnemy(`GRD-SP-BIAS-${i}`);
+      let s = runWithEnemy(`GRD-SP-BIAS-${i}`, { x: 8, y: 7 });
       s = { ...s, hero: { ...s.hero, position: { x: 8, y: 8 } }, turn: i };
       let g = s.currentFloor.grid;
       let xPos = 0;
