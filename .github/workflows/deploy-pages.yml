@@ -38,6 +38,10 @@ jobs:
 
       - name: Build (shell-web)
         run: pnpm -C packages/shell-web build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_LEADERBOARD_TABLE: ${{ secrets.VITE_SUPABASE_LEADERBOARD_TABLE }}
 
       - uses: actions/configure-pages@v5
 

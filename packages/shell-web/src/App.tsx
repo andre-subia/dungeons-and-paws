@@ -22,11 +22,14 @@ const ANIM_SPEED_STORAGE_KEY = "gridlore:animSpeed";
 const HAPTICS_STORAGE_KEY = "gridlore:hapticsEnabled";
 const SWIPE_SENSITIVITY_STORAGE_KEY = "gridlore:swipeSensitivity";
 const PLAYER_NAME_STORAGE_KEY = "gridlore:playerName";
-const LEADERBOARD_STORAGE_KEY = "gridlore:leaderboard";
 const DEFAULT_ANIM_SPEED = 0.7;
 const DEFAULT_HAPTICS_ENABLED = true;
 const DEFAULT_SWIPE_SENSITIVITY = 1.25;
 const DEFAULT_PLAYER_NAME = "";
+
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? "";
+const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
+const LEADERBOARD_TABLE = (import.meta.env.VITE_SUPABASE_LEADERBOARD_TABLE as string | undefined) ?? "leaderboard_entries";
 
 function readAnimSpeed(): number {
   try {
@@ -74,6 +77,54 @@ type LeaderboardEntry = {
   readonly outcome: Exclude<RunOutcome, "in_progress">;
 };
 
+function hasLeaderboardBackend(): boolean {
+  return SUPABASE_URL.trim() !== "" && SUPABASE_ANON_KEY.trim() !== "";
+}
+
+function supabaseHeaders(): HeadersInit {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    "Content-Type": "application/json",
+  };
+}
+
+async function fetchGlobalLeaderboard(limit = 20): Promise<LeaderboardEntry[]> {
+  if (!hasLeaderboardBackend()) return [];
+  const url = new URL(`${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/${LEADERBOARD_TABLE}`);
+  url.searchParams.set("select", "name,score,created_at,seed,outcome");
+  url.searchParams.set("order", "score.desc,created_at.desc");
+  url.searchParams.set("limit", String(limit));
+
+  const res = await fetch(url.toString(), { headers: { ...supabaseHeaders(), Accept: "application/json" } });
+  if (!res.ok) throw new Error(`leaderboard fetch failed (${res.status})`);
+  const data = (await res.json()) as Array<{
+    name: string;
+    score: number;
+    created_at: string;
+    seed: string;
+    outcome: "win" | "death";
+  }>;
+  return data.map((r) => ({
+    name: r.name,
+    score: r.score,
+    ts: Date.parse(r.created_at) || Date.now(),
+    seed: r.seed,
+    outcome: r.outcome,
+  }));
+}
+
+async function submitScore(entry: Omit<LeaderboardEntry, "ts">): Promise<void> {
+  if (!hasLeaderboardBackend()) return;
+  const url = `${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/${LEADERBOARD_TABLE}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { ...supabaseHeaders(), Prefer: "return=minimal" },
+    body: JSON.stringify([{ name: entry.name, score: entry.score, seed: entry.seed, outcome: entry.outcome }]),
+  });
+  if (!res.ok) throw new Error(`leaderboard insert failed (${res.status})`);
+}
+
 function readPlayerName(): string {
   try {
     const raw = localStorage.getItem(PLAYER_NAME_STORAGE_KEY);
@@ -81,36 +132,6 @@ function readPlayerName(): string {
   } catch {
     return "";
   }
-}
-
-function readLeaderboard(): LeaderboardEntry[] {
-  try {
-    const raw = localStorage.getItem(LEADERBOARD_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    const out: LeaderboardEntry[] = [];
-    for (const it of parsed) {
-      if (!it || typeof it !== "object") continue;
-      const o = it as Record<string, unknown>;
-      if (typeof o.name !== "string") continue;
-      if (typeof o.score !== "number") continue;
-      if (typeof o.ts !== "number") continue;
-      if (typeof o.seed !== "string") continue;
-      if (o.outcome !== "win" && o.outcome !== "death") continue;
-      out.push({ name: o.name, score: o.score, ts: o.ts, seed: o.seed, outcome: o.outcome });
-    }
-    out.sort((a, b) => b.score - a.score || b.ts - a.ts);
-    return out.slice(0, 20);
-  } catch {
-    return [];
-  }
-}
-
-function writeLeaderboard(entries: readonly LeaderboardEntry[]) {
-  try {
-    localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(entries));
-  } catch {}
 }
 
 export function App() {
@@ -123,7 +144,9 @@ export function App() {
   const [playerName, setPlayerName] = useState(() => readPlayerName() || DEFAULT_PLAYER_NAME);
   const [namePromptOpen, setNamePromptOpen] = useState(() => !readPlayerName());
   const [nameDraft, setNameDraft] = useState(() => readPlayerName());
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(readLeaderboard);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const lastRecordedRef = useRef<string>("");
   const { trigger } = useWebHaptics();
   const score = useRunStore((s) => s.state.meta.score);
@@ -136,29 +159,38 @@ export function App() {
     if (playerName.trim() === "") setNamePromptOpen(true);
   }, [playerName]);
 
+  const refreshLeaderboard = useCallback(async () => {
+    if (!hasLeaderboardBackend()) return;
+    setLeaderboardLoading(true);
+    setLeaderboardError(null);
+    try {
+      const next = await fetchGlobalLeaderboard(20);
+      setLeaderboard(next);
+    } catch (e) {
+      setLeaderboardError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLeaderboardBackend()) return;
+    refreshLeaderboard();
+  }, [refreshLeaderboard]);
+
   useEffect(() => {
     if (outcome === "in_progress") {
       lastRecordedRef.current = "";
       return;
     }
-    const key = `${seed}:${outcome}`;
+    const key = `${seed}:${outcome}:${score}`;
     if (lastRecordedRef.current === key) return;
     lastRecordedRef.current = key;
 
     const name = playerName.trim() || "Player";
-    const entry: LeaderboardEntry = {
-      name,
-      score,
-      ts: Date.now(),
-      seed,
-      outcome,
-    };
-    setLeaderboard((prev) => {
-      const next = [entry, ...prev].sort((a, b) => b.score - a.score || b.ts - a.ts).slice(0, 20);
-      writeLeaderboard(next);
-      return next;
-    });
-  }, [outcome, playerName, score, seed]);
+    if (!hasLeaderboardBackend()) return;
+    submitScore({ name, score, seed, outcome }).then(() => refreshLeaderboard()).catch(() => {});
+  }, [outcome, playerName, refreshLeaderboard, score, seed]);
 
   const attemptMove = useCallback(
     (to: Cell, source: "tap" | "keyboard") => {
@@ -899,19 +931,28 @@ export function App() {
                 {t("settings.reset")}
               </button>
 
-              {leaderboard.length > 0 && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    borderTop: "1px solid #2a2a3e",
-                    paddingTop: 10,
-                    display: "grid",
-                    gap: 6,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", opacity: 0.8 }}>
-                    {t("settings.leaderboard")}
-                  </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  borderTop: "1px solid #2a2a3e",
+                  paddingTop: 10,
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", opacity: 0.8 }}>
+                  {t("settings.leaderboard")}
+                </div>
+
+                {!hasLeaderboardBackend() ? (
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{t("settings.leaderboardNotConfigured")}</div>
+                ) : leaderboardLoading ? (
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{t("settings.leaderboardLoading")}</div>
+                ) : leaderboardError ? (
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{t("settings.leaderboardError")}</div>
+                ) : leaderboard.length === 0 ? (
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>{t("settings.leaderboardEmpty")}</div>
+                ) : (
                   <div style={{ display: "grid", gap: 4 }}>
                     {leaderboard.slice(0, 10).map((e, idx) => (
                       <div
@@ -923,8 +964,8 @@ export function App() {
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
