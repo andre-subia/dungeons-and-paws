@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Grid, STANDARD_GRID, emptyTile, runeTile } from "../src/world/grid.js";
 import { recomputeLattices, newlyDecharged } from "../src/world/lattice.js";
 import { RUNES, type Rune } from "../src/core/types.js";
+import { enemyTile } from "../src/world/grid.js";
 
 function blankGrid() {
   return Grid.empty(STANDARD_GRID, (i) => emptyTile(`t${i}`));
@@ -89,5 +90,17 @@ describe("LatticeTracker", () => {
     }
     const snap = recomputeLattices(g);
     expect(snap.byId.get("chamber:0")?.isCharged).toBe(true);
+  });
+
+  it("does not count enemy tiles toward rune sets", () => {
+    let g = blankGrid();
+    g = g
+      .set({ x: 0, y: 0 }, enemyTile("e0", "e0", "ember"))
+      .set({ x: 1, y: 0 }, enemyTile("e1", "e1", "tide"))
+      .set({ x: 2, y: 0 }, enemyTile("e2", "e2", "bone"));
+    const snap = recomputeLattices(g);
+    const row0 = snap.byId.get("row:0");
+    expect(row0?.runesPresent.size).toBe(0);
+    expect(row0?.isCharged).toBe(false);
   });
 });

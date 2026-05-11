@@ -95,11 +95,12 @@ function buildLattice(
   id: LatticeId,
   kind: LatticeKind,
   index: number,
-  tiles: readonly { rune: Rune | null }[],
+  tiles: readonly { rune: Rune | null; kind: string }[],
   previous: LatticeSnapshot,
 ): LatticeState {
   const runesPresent = new Set<Rune>();
   for (const t of tiles) {
+    if (t.kind !== "rune") continue;
     if (t.rune !== null) runesPresent.add(t.rune);
   }
   const chargeThreshold =

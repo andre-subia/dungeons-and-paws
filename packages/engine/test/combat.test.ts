@@ -232,14 +232,7 @@ describe("floor generator — enemy placement", () => {
     }
   });
 
-  it("enemy tiles count toward lattices via their rune", () => {
-    const f = generateFloor("GEN-LAT", 2, SMALL_GRID);
-    let enemyRuneCells = 0;
-    for (const { tile } of f.grid.each()) {
-      if (tile.kind === "enemy" && tile.rune !== null) enemyRuneCells++;
-    }
-    expect(enemyRuneCells).toBeGreaterThan(0);
-  });
+  // Lattice rune-counting rules are covered in lattice.test.ts
 });
 
 describe("makeInitialRunState integration", () => {

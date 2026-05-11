@@ -16,10 +16,19 @@ import type { LatticeId, Rune } from "../core/types.js";
 import type { GameEvent, KeystoneBonusEffect } from "../core/events.js";
 import type { RunState } from "../run/state.js";
 import type { ResolveResult } from "./resolve.js";
+import { grantXp } from "../entities/hero.js";
 
-const COIN_KEYSTONE_GOLD = 25;
-const BONE_KEYSTONE_HEAL = 5;
-const IRON_KEYSTONE_ARMOR = 5;
+const TIDE_KEYSTONE_HEAL_CAP = 3;
+const COIN_KEYSTONE_GOLD = 10;
+const BONE_KEYSTONE_HEAL = 2;
+const IRON_KEYSTONE_ARMOR = 2;
+const EMBER_KEYSTONE_ATTACK = 1;
+const EMBER_KEYSTONE_ATTACK_MAX = 5;
+const STAR_KEYSTONE_XP = 6;
+const BLOOD_KEYSTONE_HP_MAX = 1;
+const BLOOD_KEYSTONE_HP_MAX_CAP = 12;
+const BLOOD_KEYSTONE_HEAL = 1;
+const VOID_KEYSTONE_STRIDE_MAX = 2;
 
 export function applyKeystone(
   state: RunState,
@@ -38,7 +47,7 @@ export function applyKeystone(
       for (const { tile } of state.currentFloor.grid.each()) {
         if (tile.rune === "tide") tideRunes++;
       }
-      const gain = Math.min(5, tideRunes, nextHero.hpMax - nextHero.hp);
+      const gain = Math.min(TIDE_KEYSTONE_HEAL_CAP, tideRunes, nextHero.hpMax - nextHero.hp);
       if (gain > 0) {
         nextHero = { ...nextHero, hp: nextHero.hp + gain };
         events.push({ type: "HP_HEALED", amount: gain });
@@ -67,21 +76,55 @@ export function applyKeystone(
       effect = { kind: "iron", armorGained: IRON_KEYSTONE_ARMOR };
       break;
     }
-    case "ember":
-      effect = { kind: "pending" };
+    case "ember": {
+      const before = nextHero.attack;
+      const after = Math.min(EMBER_KEYSTONE_ATTACK_MAX, before + EMBER_KEYSTONE_ATTACK);
+      nextHero = { ...nextHero, attack: after };
+      effect = { kind: "ember", attackGained: after - before, attack: after };
       break;
-    case "bramble":
-      effect = { kind: "pending" };
+    }
+    case "bramble": {
+      const canGain = nextHero.potions < nextHero.potionsMax;
+      if (canGain) {
+        nextHero = { ...nextHero, potions: nextHero.potions + 1 };
+        events.push({
+          type: "POTION_GAINED",
+          potions: nextHero.potions,
+          potionsMax: nextHero.potionsMax,
+        });
+      }
+      effect = {
+        kind: "bramble",
+        potionGained: canGain,
+        potions: nextHero.potions,
+        potionsMax: nextHero.potionsMax,
+      };
       break;
-    case "star":
-      effect = { kind: "pending" };
+    }
+    case "star": {
+      const xpResult = grantXp(nextHero, STAR_KEYSTONE_XP);
+      nextHero = xpResult.hero;
+      if (xpResult.levelsGained > 0) {
+        events.push({ type: "HERO_LEVELED_UP", level: nextHero.level, hpMax: nextHero.hpMax });
+      }
+      effect = { kind: "star", xpGained: STAR_KEYSTONE_XP, level: nextHero.level };
       break;
-    case "void":
-      effect = { kind: "pending" };
+    }
+    case "void": {
+      const before = nextHero.stride;
+      const after = Math.min(VOID_KEYSTONE_STRIDE_MAX, before + 1);
+      nextHero = { ...nextHero, stride: after };
+      effect = { kind: "void", strideGained: after - before, stride: after };
       break;
-    case "blood":
-      effect = { kind: "pending" };
+    }
+    case "blood": {
+      const hpMax = Math.min(BLOOD_KEYSTONE_HP_MAX_CAP, nextHero.hpMax + BLOOD_KEYSTONE_HP_MAX);
+      const healed = Math.min(BLOOD_KEYSTONE_HEAL, hpMax - nextHero.hp);
+      nextHero = { ...nextHero, hpMax, hp: nextHero.hp + healed };
+      if (healed > 0) events.push({ type: "HP_HEALED", amount: healed });
+      effect = { kind: "blood", hpMaxGained: hpMax - state.hero.hpMax, healed, hpMax };
       break;
+    }
   }
 
   events.push({ type: "KEYSTONE_BONUS", lattice, keystone, effect });

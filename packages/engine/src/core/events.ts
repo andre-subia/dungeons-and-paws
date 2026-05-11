@@ -22,6 +22,11 @@ export type KeystoneBonusEffect =
   | { readonly kind: "coin"; readonly goldGained: number }
   | { readonly kind: "bone"; readonly hpGained: number }
   | { readonly kind: "iron"; readonly armorGained: number }
+  | { readonly kind: "ember"; readonly attackGained: number; readonly attack: number }
+  | { readonly kind: "bramble"; readonly potionGained: boolean; readonly potions: number; readonly potionsMax: number }
+  | { readonly kind: "star"; readonly xpGained: number; readonly level: number }
+  | { readonly kind: "void"; readonly strideGained: number; readonly stride: number }
+  | { readonly kind: "blood"; readonly hpMaxGained: number; readonly healed: number; readonly hpMax: number }
   | { readonly kind: "pending" };
 
 export type GameEvent =

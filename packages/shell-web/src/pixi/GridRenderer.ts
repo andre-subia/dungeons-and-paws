@@ -16,7 +16,7 @@
  */
 
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from "pixi.js";
-import { chebyshev, cellEq, type Cell, type GameEvent, type RunState, type Tile } from "@gridlore/engine";
+import { chebyshev, cellEq, type Cell, type GameEvent, type Rune, type RunState, type Tile } from "@gridlore/engine";
 import { t } from "../i18n.js";
 import {
   COLORS,
@@ -26,6 +26,7 @@ import {
   HERO_EMOJI,
   KEY_EMOJI,
   LOCK_EMOJI,
+  RUNE_COLORS,
   RUNE_EMOJI,
   RUNE_PASSIVE,
 } from "./palette.js";
@@ -43,6 +44,8 @@ const ANIM_SPEED = 0.7;
 const ATTACK_LUNGE_MS = Math.round(360 / ANIM_SPEED);
 const HIT_FLASH_MS = Math.round(260 / ANIM_SPEED);
 const DAMAGE_FLOAT_MS = Math.round(560 / ANIM_SPEED);
+const LATTICE_PULSE_MS = Math.round(620 / ANIM_SPEED);
+const LATTICE_POP_MS = Math.round(520 / ANIM_SPEED);
 
 export class GridRenderer {
   private readonly app: Application;
@@ -157,34 +160,44 @@ export class GridRenderer {
     this.lastAnimKey = key;
 
     for (const e of events) {
-      if (e.type !== "DAMAGE_DEALT") continue;
-      if (e.amount <= 0) continue;
-      const source = e.source;
-      const target = e.target;
-      const heroId = "hero";
+      switch (e.type) {
+        case "DAMAGE_DEALT": {
+          if (e.amount <= 0) break;
+          const source = e.source;
+          const target = e.target;
+          const heroId = "hero";
 
-      if (source === heroId && target !== heroId) {
-        const heroCell = state.hero.position;
-        const targetCell = this.enemyCellFromEventsOrState(String(target), events, state);
-        if (!targetCell) continue;
-        this.animateAttack({
-          attackerEmoji: HERO_EMOJI,
-          from: heroCell,
-          to: targetCell,
-          showDamage: e.amount,
-        });
-      } else if (target === heroId && source !== heroId) {
-        const enemyId = String(source);
-        const enemyCell = this.enemyCellFromEventsOrState(enemyId, events, state);
-        if (!enemyCell) continue;
-        const enemy = state.currentFloor.enemies.get(enemyId);
-        const emoji = enemy ? ENEMY_EMOJI[enemy.templateId] ?? "👾" : "👾";
-        this.animateAttack({
-          attackerEmoji: emoji,
-          from: enemyCell,
-          to: state.hero.position,
-          showDamage: e.amount,
-        });
+          if (source === heroId && target !== heroId) {
+            const heroCell = state.hero.position;
+            const targetCell = this.enemyCellFromEventsOrState(String(target), events, state);
+            if (!targetCell) break;
+            this.animateAttack({
+              attackerEmoji: HERO_EMOJI,
+              from: heroCell,
+              to: targetCell,
+              showDamage: e.amount,
+            });
+          } else if (target === heroId && source !== heroId) {
+            const enemyId = String(source);
+            const enemyCell = this.enemyCellFromEventsOrState(enemyId, events, state);
+            if (!enemyCell) break;
+            const enemy = state.currentFloor.enemies.get(enemyId);
+            const emoji = enemy ? ENEMY_EMOJI[enemy.templateId] ?? "👾" : "👾";
+            this.animateAttack({
+              attackerEmoji: emoji,
+              from: enemyCell,
+              to: state.hero.position,
+              showDamage: e.amount,
+            });
+          }
+          break;
+        }
+        case "LATTICE_CHARGED": {
+          this.animateLatticeCharged(String(e.lattice), e.keystone, state);
+          break;
+        }
+        default:
+          break;
       }
     }
   }
@@ -195,6 +208,9 @@ export class GridRenderer {
       switch (e.type) {
         case "DAMAGE_DEALT":
           parts.push(`d:${e.source}:${e.target}:${e.amount}`);
+          break;
+        case "LATTICE_CHARGED":
+          parts.push(`lc:${e.lattice}:${e.keystone}`);
           break;
         case "ENEMY_ATTACKED":
           parts.push(`ea:${e.enemyId}:${e.cell.x},${e.cell.y}`);
@@ -296,6 +312,116 @@ export class GridRenderer {
       dmg.scale.set(s);
     };
     this.activeAnimations.push({ node: dmg, elapsedMs: 0, durationMs, update });
+  }
+
+  private animateLatticeCharged(lattice: string, keystone: Rune, state: RunState): void {
+    const cells = this.latticeCells(lattice, state);
+    if (!cells) return;
+
+    const color = RUNE_COLORS[keystone] ?? 0xffd95a;
+    const group = new Container();
+    group.alpha = 0;
+    this.animationLayer.addChild(group);
+
+    const { cardW, cardH, marginX, marginY, radius } = this.cardDims();
+    for (const cell of cells) {
+      const x = cell.x * this.cellWidth + marginX;
+      const y = cell.y * this.cellHeight + marginY;
+      const g = new Graphics();
+      g.roundRect(x, y, cardW, cardH, radius).fill({ color, alpha: 0.12 });
+      g.roundRect(x, y, cardW, cardH, radius).stroke({ color, width: 4, alpha: 0.9 });
+      group.addChild(g);
+    }
+
+    const center = this.cellsCenterPx(cells);
+    const emoji = new Text({
+      text: `${RUNE_EMOJI[keystone]}⚡`,
+      style: {
+        fontFamily: EMOJI_FONT_FAMILY,
+        fontSize: Math.max(14, Math.floor(cardW * 0.5)),
+        fill: 0xffffff,
+      },
+    });
+    emoji.anchor.set(0.5);
+    emoji.position.set(center.x, center.y);
+    group.addChild(emoji);
+
+    const pulseUpdate = (t: number) => {
+      const peak = Math.sin(Math.PI * t);
+      group.alpha = 0.9 * peak;
+      const s = 1 + 0.03 * peak;
+      group.scale.set(s);
+      emoji.scale.set(1 + 0.18 * easeOutCubic(peak));
+    };
+    this.activeAnimations.push({ node: group, elapsedMs: 0, durationMs: LATTICE_PULSE_MS, update: pulseUpdate });
+
+    this.latticePopRing(center, color);
+  }
+
+  private latticePopRing(center: { x: number; y: number }, color: number): void {
+    const ring = new Graphics();
+    ring.position.set(center.x, center.y);
+    ring.alpha = 0;
+    this.animationLayer.addChild(ring);
+
+    const maxR = Math.max(10, Math.floor(this.cardDims().cardW * 0.55));
+    const update = (t: number) => {
+      ring.clear();
+      const eased = easeOutCubic(t);
+      const r = 6 + (maxR - 6) * eased;
+      ring.circle(0, 0, r).stroke({ color, width: 4, alpha: 1 - t });
+      ring.alpha = 1 - t;
+    };
+    this.activeAnimations.push({ node: ring, elapsedMs: 0, durationMs: LATTICE_POP_MS, update });
+  }
+
+  private cellsCenterPx(cells: readonly Cell[]): { x: number; y: number } {
+    let sx = 0;
+    let sy = 0;
+    for (const c of cells) {
+      const p = this.cellCenterPx(c);
+      sx += p.x;
+      sy += p.y;
+    }
+    const n = Math.max(1, cells.length);
+    return { x: sx / n, y: sy / n };
+  }
+
+  private latticeCells(lattice: string, state: RunState): Cell[] | null {
+    const [kind, idxRaw] = lattice.split(":");
+    const idx = idxRaw ? Number(idxRaw) : NaN;
+    if (!Number.isFinite(idx)) return null;
+
+    const grid = state.currentFloor.grid;
+    if (kind === "row") {
+      const y = idx;
+      if (y < 0 || y >= grid.height) return null;
+      const out: Cell[] = [];
+      for (let x = 0; x < grid.width; x++) out.push({ x, y });
+      return out;
+    }
+    if (kind === "column") {
+      const x = idx;
+      if (x < 0 || x >= grid.width) return null;
+      const out: Cell[] = [];
+      for (let y = 0; y < grid.height; y++) out.push({ x, y });
+      return out;
+    }
+    if (kind === "chamber") {
+      const chambersPerRow = grid.width / grid.chamberWidth;
+      const cx = idx % chambersPerRow;
+      const cy = Math.floor(idx / chambersPerRow);
+      const x0 = cx * grid.chamberWidth;
+      const y0 = cy * grid.chamberHeight;
+      const out: Cell[] = [];
+      for (let dy = 0; dy < grid.chamberHeight; dy++) {
+        for (let dx = 0; dx < grid.chamberWidth; dx++) {
+          out.push({ x: x0 + dx, y: y0 + dy });
+        }
+      }
+      return out;
+    }
+    return null;
   }
 
   private cellCenterPx(cell: Cell): { x: number; y: number } {

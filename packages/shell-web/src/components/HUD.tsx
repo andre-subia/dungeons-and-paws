@@ -432,6 +432,18 @@ function formatKeystoneBonus(
       return t("event.keystoneBonus.bone", { hp: e.effect.hpGained });
     case "iron":
       return t("event.keystoneBonus.iron", { armor: e.effect.armorGained });
+    case "ember":
+      return t("event.keystoneBonus.ember", { atk: e.effect.attackGained, total: e.effect.attack });
+    case "bramble":
+      return e.effect.potionGained
+        ? t("event.keystoneBonus.bramble", { potions: e.effect.potions, max: e.effect.potionsMax })
+        : t("event.keystoneBonus.brambleFull", { max: e.effect.potionsMax });
+    case "star":
+      return t("event.keystoneBonus.star", { xp: e.effect.xpGained, level: e.effect.level });
+    case "void":
+      return t("event.keystoneBonus.void", { stride: e.effect.stride });
+    case "blood":
+      return t("event.keystoneBonus.blood", { hpMax: e.effect.hpMax, healed: e.effect.healed });
     case "pending":
       return t("event.keystoneBonus.pending", { keystone: tRune(e.keystone) });
   }

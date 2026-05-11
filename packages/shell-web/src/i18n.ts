@@ -40,7 +40,7 @@ const DICTS: Record<Locale, Dict> = {
       "🪙 Coin → +1 🪙 gold\n" +
       "🦴 Bone → +1 ♥ HP\n" +
       "⚙️ Iron → +1 🛡 armor\n" +
-      "🔥 Ember · 🌿 Bramble · ⭐ Star · 🌑 Void · 🩸 Blood — consumed only (effects coming)",
+      "🔥 Ember · 🌿 Bramble · ⭐ Star · 🌑 Void · 🩸 Blood — no bonus when consumed (their power is in charging LATTICES ⚡)",
     "help.section.lattices.title": "LATTICES ⚡",
     "help.section.lattices.body":
       "Rows, columns, and chambers can CHARGE when they hold enough different runes at once (see the HUD).\n" +
@@ -56,11 +56,15 @@ const DICTS: Record<Locale, Dict> = {
       "  5) The last rune that completed 3/3 is the KEYSTONE and its bonus triggers instantly.\n" +
       "\n" +
       "The last rune that completes the charge becomes the KEYSTONE and triggers a bonus:\n" +
-      "  💧 Tide → restore up to 5 ♥\n" +
-      "  🪙 Coin → +25 🪙\n" +
-      "  🦴 Bone → +5 ♥\n" +
-      "  ⚙️ Iron → +5 🛡\n" +
-      "  others → coming soon\n" +
+      "  💧 Tide → restore up to 3 ♥\n" +
+      "  🪙 Coin → +10 🪙\n" +
+      "  🦴 Bone → +2 ♥\n" +
+      "  ⚙️ Iron → +2 🛡\n" +
+      "  🔥 Ember → +1 ⚔ attack\n" +
+      "  🌿 Bramble → +1 🧪 potion (if not full)\n" +
+      "  ⭐ Star → +6 XP\n" +
+      "  🌑 Void → +1 stride (up to 2)\n" +
+      "  🩸 Blood → +1 ♥ max (up to 12) and +1 ♥\n" +
       "Charged lattices tint the board. If a rune disappears (consumed or an enemy dies), a lattice can decharge.",
     "help.section.exit.title": "EXIT 🚪",
     "help.section.exit.body":
@@ -113,6 +117,12 @@ const DICTS: Record<Locale, Dict> = {
     "event.keystoneBonus.coin": "⚡ Coin cascade — +{gold} gold",
     "event.keystoneBonus.bone": "⚡ Bone bind — +{hp} HP",
     "event.keystoneBonus.iron": "⚡ Iron oath — +{armor} armor",
+    "event.keystoneBonus.ember": "⚡ Ember flare — +{atk} attack (now {total})",
+    "event.keystoneBonus.bramble": "⚡ Bramble brew — +1 potion ({potions}/{max})",
+    "event.keystoneBonus.brambleFull": "⚡ Bramble brew — potions full ({max})",
+    "event.keystoneBonus.star": "⚡ Star insight — +{xp} XP (lvl {level})",
+    "event.keystoneBonus.void": "⚡ Void step — stride {stride}",
+    "event.keystoneBonus.blood": "⚡ Blood pact — ♥ max {hpMax} (+{healed} HP)",
     "event.keystoneBonus.pending": "⚡ {keystone} keystone (pending)",
     "event.goldGained": "🪙 +{amount}",
     "event.hpHealed": "♥ +{amount} HP",
@@ -189,7 +199,7 @@ const DICTS: Record<Locale, Dict> = {
       "🪙 Moneda → +1 🪙 oro\n" +
       "🦴 Hueso → +1 ♥ HP\n" +
       "⚙️ Hierro → +1 🛡 armadura\n" +
-      "🔥 Brasa · 🌿 Zarza · ⭐ Estrella · 🌑 Vacío · 🩸 Sangre — solo se consumen (efectos próximos)",
+      "🔥 Brasa · 🌿 Zarza · ⭐ Estrella · 🌑 Vacío · 🩸 Sangre — no dan bonus al consumirlas (su poder está en activar LATTICES ⚡)",
     "help.section.lattices.title": "LATTICES ⚡",
     "help.section.lattices.body":
       "Filas, columnas y cámaras pueden CARGARSE cuando tienen suficientes runas distintas al mismo tiempo (mira el HUD).\n" +
@@ -205,11 +215,15 @@ const DICTS: Record<Locale, Dict> = {
       "  5) La última runa que completó el 3/3 es la CLAVE (keystone) y el bonus se activa al instante.\n" +
       "\n" +
       "La última runa que completa la carga es la CLAVE y dispara un bonus:\n" +
-      "  💧 Marea → recupera hasta 5 ♥\n" +
-      "  🪙 Moneda → +25 🪙\n" +
-      "  🦴 Hueso → +5 ♥\n" +
-      "  ⚙️ Hierro → +5 🛡\n" +
-      "  otras → próximamente\n" +
+      "  💧 Marea → recupera hasta 3 ♥\n" +
+      "  🪙 Moneda → +10 🪙\n" +
+      "  🦴 Hueso → +2 ♥\n" +
+      "  ⚙️ Hierro → +2 🛡\n" +
+      "  🔥 Ascua → +1 ⚔ ataque\n" +
+      "  🌿 Zarza → +1 🧪 poción (si no está lleno)\n" +
+      "  ⭐ Estrella → +6 EXP\n" +
+      "  🌑 Vacío → +1 paso (máx 2)\n" +
+      "  🩸 Sangre → +1 ♥ máx (máx 12) y +1 ♥\n" +
       "Las lattices cargadas tiñen el tablero. Si una runa desaparece (consumida o muere un enemigo), una lattice puede descargarse.",
     "help.section.exit.title": "SALIDA 🚪",
     "help.section.exit.body":
@@ -262,6 +276,12 @@ const DICTS: Record<Locale, Dict> = {
     "event.keystoneBonus.coin": "⚡ Cascada — +{gold} oro",
     "event.keystoneBonus.bone": "⚡ Atadura — +{hp} HP",
     "event.keystoneBonus.iron": "⚡ Juramento — +{armor} armadura",
+    "event.keystoneBonus.ember": "⚡ Ascua — +{atk} ⚔ ataque (ahora {total})",
+    "event.keystoneBonus.bramble": "⚡ Zarza — +1 🧪 poción ({potions}/{max})",
+    "event.keystoneBonus.brambleFull": "⚡ Zarza — pociones llenas ({max})",
+    "event.keystoneBonus.star": "⚡ Estrella — +{xp} EXP (nivel {level})",
+    "event.keystoneBonus.void": "⚡ Vacío — paso {stride}",
+    "event.keystoneBonus.blood": "⚡ Sangre — ♥ máx {hpMax} (+{healed} ♥)",
     "event.keystoneBonus.pending": "⚡ clave {keystone} (pendiente)",
     "event.goldGained": "🪙 +{amount}",
     "event.hpHealed": "♥ +{amount} HP",
@@ -338,7 +358,7 @@ const DICTS: Record<Locale, Dict> = {
       "🪙 Moeda → +1 🪙 ouro\n" +
       "🦴 Osso → +1 ♥ HP\n" +
       "⚙️ Ferro → +1 🛡 armadura\n" +
-      "🔥 Brasa · 🌿 Espinho · ⭐ Estrela · 🌑 Vazio · 🩸 Sangue — só são consumidas (efeitos em breve)",
+      "🔥 Brasa · 🌿 Espinho · ⭐ Estrela · 🌑 Vazio · 🩸 Sangue — sem bônus ao consumir (o poder está em ativar LATTICES ⚡)",
     "help.section.lattices.title": "LATTICES ⚡",
     "help.section.lattices.body":
       "Linhas, colunas e câmaras podem CARREGAR quando têm runas diferentes suficientes ao mesmo tempo (veja o HUD).\n" +
@@ -354,11 +374,15 @@ const DICTS: Record<Locale, Dict> = {
       "  5) A última runa que completou o 3/3 vira a CHAVE (keystone) e o bônus ativa na hora.\n" +
       "\n" +
       "A última runa que completa a carga vira CHAVE e dispara um bônus:\n" +
-      "  💧 Maré → restaura até 5 ♥\n" +
-      "  🪙 Moeda → +25 🪙\n" +
-      "  🦴 Osso → +5 ♥\n" +
-      "  ⚙️ Ferro → +5 🛡\n" +
-      "  outras → em breve\n" +
+      "  💧 Maré → restaura até 3 ♥\n" +
+      "  🪙 Moeda → +10 🪙\n" +
+      "  🦴 Osso → +2 ♥\n" +
+      "  ⚙️ Ferro → +2 🛡\n" +
+      "  🔥 Brasa → +1 ⚔ ataque\n" +
+      "  🌿 Espinho → +1 🧪 poção (se não estiver cheio)\n" +
+      "  ⭐ Estrela → +6 EXP\n" +
+      "  🌑 Vazio → +1 passo (máx 2)\n" +
+      "  🩸 Sangue → +1 ♥ máx (máx 12) e +1 ♥\n" +
       "Lattices carregadas tingem o tabuleiro. Se uma runa sumir (consumida ou inimigo morre), uma lattice pode descarregar.",
     "help.section.exit.title": "SAÍDA 🚪",
     "help.section.exit.body":
@@ -411,6 +435,12 @@ const DICTS: Record<Locale, Dict> = {
     "event.keystoneBonus.coin": "⚡ Cascata — +{gold} ouro",
     "event.keystoneBonus.bone": "⚡ Ossos — +{hp} HP",
     "event.keystoneBonus.iron": "⚡ Ferro — +{armor} armadura",
+    "event.keystoneBonus.ember": "⚡ Brasa — +{atk} ⚔ ataque (agora {total})",
+    "event.keystoneBonus.bramble": "⚡ Espinho — +1 🧪 poção ({potions}/{max})",
+    "event.keystoneBonus.brambleFull": "⚡ Espinho — poções cheias ({max})",
+    "event.keystoneBonus.star": "⚡ Estrela — +{xp} EXP (nível {level})",
+    "event.keystoneBonus.void": "⚡ Vazio — passo {stride}",
+    "event.keystoneBonus.blood": "⚡ Sangue — ♥ máx {hpMax} (+{healed} ♥)",
     "event.keystoneBonus.pending": "⚡ chave {keystone} (pendente)",
     "event.goldGained": "🪙 +{amount}",
     "event.hpHealed": "♥ +{amount} HP",

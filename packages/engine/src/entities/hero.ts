@@ -37,7 +37,7 @@ export const WANDERER_TEMPLATE: HeroTemplate = {
 
 export function xpToNextLevel(level: number): number {
   const lvl = Math.max(1, Math.floor(level));
-  return 20 + (lvl - 1) * 10;
+  return 25 + (lvl - 1) * 15;
 }
 
 export type XpGainResult = {
@@ -55,7 +55,7 @@ export function grantXp(hero: HeroState, amount: number): XpGainResult {
     xp -= xpToNextLevel(level);
     level += 1;
     gained += 1;
-    const hpDelta = 2;
+    const hpDelta = 1;
     hpMax += hpDelta;
   }
 

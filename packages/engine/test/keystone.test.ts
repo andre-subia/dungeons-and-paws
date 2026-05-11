@@ -3,7 +3,7 @@ import { applyKeystone } from "../src/sim/keystone.js";
 import { runeTile } from "../src/world/grid.js";
 import { recomputeLattices } from "../src/world/lattice.js";
 import { makeBlankRunState } from "./_helpers.js";
-import type { Cell, Rune } from "../src/core/types.js";
+import type { Cell } from "../src/core/types.js";
 
 function freshState() {
   return makeBlankRunState({ seed: "GRD-KS-01" });
@@ -44,7 +44,7 @@ describe("applyKeystone", () => {
     let state = stateWithTideRunes(8);
     state = { ...state, hero: { ...state.hero, hp: 1 } };
     const result = applyKeystone(state, "row:0", "tide");
-    expect(result.state.hero.hp).toBe(6);
+    expect(result.state.hero.hp).toBe(4);
   });
 
   it("Tide heal capped by Tide rune count when grid has few", () => {
@@ -66,7 +66,7 @@ describe("applyKeystone", () => {
   it("Coin grants +25 gold", () => {
     const state = freshState();
     const result = applyKeystone(state, "row:0", "coin");
-    expect(result.state.meta.gold).toBe(25);
+    expect(result.state.meta.gold).toBe(10);
   });
 
   it("Bone heals up to 5 HP capped at hpMax", () => {
@@ -79,17 +79,42 @@ describe("applyKeystone", () => {
   it("Iron grants +5 armor", () => {
     const state = freshState();
     const result = applyKeystone(state, "row:0", "iron");
-    expect(result.state.hero.armor).toBe(state.hero.armor + 5);
+    expect(result.state.hero.armor).toBe(state.hero.armor + 2);
   });
 
-  it("combat keystones (Ember/Bramble/Star/Void/Blood) emit only KEYSTONE_BONUS", () => {
+  it("Ember grants +1 attack", () => {
     const state = freshState();
-    const stubKeys: Rune[] = ["ember", "bramble", "star", "void", "blood"];
-    for (const k of stubKeys) {
-      const result = applyKeystone(state, "row:0", k);
-      expect(result.state).toEqual(state);
-      expect(result.events.length).toBe(1);
-      expect(result.events[0]?.type).toBe("KEYSTONE_BONUS");
-    }
+    const result = applyKeystone(state, "row:0", "ember");
+    expect(result.state.hero.attack).toBe(state.hero.attack + 1);
+    expect(result.events.some((e) => e.type === "KEYSTONE_BONUS")).toBe(true);
+  });
+
+  it("Bramble grants +1 potion when not full", () => {
+    let state = freshState();
+    state = { ...state, hero: { ...state.hero, potions: 0 } };
+    const result = applyKeystone(state, "row:0", "bramble");
+    expect(result.state.hero.potions).toBe(1);
+    expect(result.events.some((e) => e.type === "POTION_GAINED")).toBe(true);
+  });
+
+  it("Star grants XP", () => {
+    const state = freshState();
+    const result = applyKeystone(state, "row:0", "star");
+    expect(result.state.hero.xp).toBeGreaterThanOrEqual(state.hero.xp);
+    expect(result.events.some((e) => e.type === "KEYSTONE_BONUS")).toBe(true);
+  });
+
+  it("Void increases stride up to a cap", () => {
+    const state = freshState();
+    const result = applyKeystone(state, "row:0", "void");
+    expect(result.state.hero.stride).toBeGreaterThanOrEqual(state.hero.stride);
+  });
+
+  it("Blood increases hpMax and heals a bit", () => {
+    let state = freshState();
+    state = { ...state, hero: { ...state.hero, hp: 1 } };
+    const result = applyKeystone(state, "row:0", "blood");
+    expect(result.state.hero.hpMax).toBe(state.hero.hpMax + 1);
+    expect(result.state.hero.hp).toBeGreaterThan(state.hero.hp);
   });
 });

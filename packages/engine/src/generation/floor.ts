@@ -33,7 +33,6 @@ import {
 } from "../entities/enemy-templates.js";
 
 const RUNE_DENSITY = 0.55;
-const MAX_GRID_DIM = 6;
 
 export function generateFloor(
   seed: string,
@@ -140,15 +139,17 @@ function placeEnemies(
     const templateId = rng.pick(pool) as EnemyTemplateId;
     const template = ENEMY_TEMPLATES[templateId];
     const enemyId = `e-f${floorIndex}-${i}`;
+    const hpBoost = Math.floor(floorIndex / 3);
+    const attackBoost = Math.floor(floorIndex / 8);
 
     enemies.set(enemyId, {
       id: enemyId,
       templateId: template.templateId,
       archetype: template.archetype,
       position: cell,
-      hp: template.hp,
-      hpMax: template.hp,
-      attack: template.attack,
+      hp: template.hp + hpBoost,
+      hpMax: template.hp + hpBoost,
+      attack: template.attack + attackBoost,
       rune: template.rune,
       intent: null,
       modifiers: [],
@@ -228,20 +229,6 @@ function firstRuneCellInLattice(grid: Grid, kind: "row" | "column" | "chamber", 
 }
 
 export function gridDimsForFloor(floorIndex: number, base: GridDimensions): GridDimensions {
-  const steps = Math.floor(floorIndex / 10);
-  let width = base.width;
-  let height = base.height;
-
-  for (let i = 1; i <= steps; i++) {
-    if (width >= MAX_GRID_DIM && height >= MAX_GRID_DIM) break;
-    if (i % 2 === 1) height = Math.min(MAX_GRID_DIM, height + 1);
-    else width = Math.min(MAX_GRID_DIM, width + 1);
-  }
-
-  return {
-    width,
-    height,
-    chamberWidth: width,
-    chamberHeight: height,
-  };
+  void floorIndex;
+  return base;
 }
