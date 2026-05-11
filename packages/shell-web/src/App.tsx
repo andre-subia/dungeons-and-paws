@@ -133,10 +133,9 @@ async function fetchGlobalLeaderboard(limit = 20): Promise<LeaderboardEntry[]> {
 async function submitScore(entry: ScoreSubmission): Promise<void> {
   if (!hasLeaderboardBackend()) return;
   const baseUrl = `${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/${LEADERBOARD_TABLE}`;
-  const writeHeaders = { ...supabaseHeaders(), Prefer: "return=minimal" };
-  const readHeaders = { ...supabaseHeaders(), Accept: "application/json" };
+  const writeHeaders = { ...supabaseHeaders(), Prefer: "return=representation" };
 
-  const tryInsertRow = async (row: Record<string, unknown>) => {
+  const tryInsertRow = async (row: Record<string, unknown>): Promise<Response> => {
     return fetch(baseUrl, {
       method: "POST",
       headers: writeHeaders,
@@ -144,9 +143,12 @@ async function submitScore(entry: ScoreSubmission): Promise<void> {
     });
   };
 
-  const tryPatchBy = async (column: string, value: string, body: Record<string, unknown>) => {
+  const tryPatchByFilters = async (
+    filters: Record<string, string>,
+    body: Record<string, unknown>,
+  ): Promise<Response> => {
     const url = new URL(baseUrl);
-    url.searchParams.set(column, `eq.${value}`);
+    for (const [k, v] of Object.entries(filters)) url.searchParams.set(k, v);
     return fetch(url.toString(), {
       method: "PATCH",
       headers: writeHeaders,
@@ -154,44 +156,49 @@ async function submitScore(entry: ScoreSubmission): Promise<void> {
     });
   };
 
-  const tryReadBestByPlayerId = async (): Promise<number | null> => {
-    const url = new URL(baseUrl);
-    url.searchParams.set("select", "score");
-    url.searchParams.set("player_id", `eq.${entry.playerId}`);
-    url.searchParams.set("limit", "1");
-    const res = await fetch(url.toString(), { headers: readHeaders });
-    if (!res.ok) {
-      if (res.status === 400 || res.status === 404) leaderboardSupportsPlayerId = false;
+  const readChangedRowsCount = async (res: Response): Promise<number | null> => {
+    if (!res.ok) return null;
+    try {
+      const data = (await res.json()) as unknown;
+      if (Array.isArray(data)) return data.length;
+      return null;
+    } catch {
       return null;
     }
-    leaderboardSupportsPlayerId = true;
-    const rows = (await res.json()) as Array<{ score: number }>;
-    const s = rows[0]?.score;
-    return typeof s === "number" && Number.isFinite(s) ? s : null;
   };
 
   if (leaderboardSupportsPlayerId !== false) {
-    const best = await tryReadBestByPlayerId();
-    if (best != null && entry.score <= best) return;
+    const patchFilters = { player_id: `eq.${entry.playerId}`, score: `lt.${entry.score}` };
+    const patchWithFloor = await tryPatchByFilters(patchFilters, {
+      name: entry.name,
+      score: entry.score,
+      seed: entry.seed,
+      outcome: entry.outcome,
+      floor: entry.floor,
+    });
+    if (patchWithFloor.ok) {
+      const changed = await readChangedRowsCount(patchWithFloor);
+      if (changed != null && changed > 0) return;
+    } else if (patchWithFloor.status === 400 || patchWithFloor.status === 404) {
+      leaderboardSupportsPlayerId = false;
+    }
 
-    if (leaderboardSupportsPlayerId === true) {
-      const patchWithFloor = await tryPatchBy("player_id", entry.playerId, {
+    if (leaderboardSupportsPlayerId !== false) {
+      const patchWithoutFloor = await tryPatchByFilters(patchFilters, {
         name: entry.name,
         score: entry.score,
         seed: entry.seed,
         outcome: entry.outcome,
-        floor: entry.floor,
       });
-      if (patchWithFloor.ok) return;
+      if (patchWithoutFloor.ok) {
+        const changed = await readChangedRowsCount(patchWithoutFloor);
+        if (changed != null && changed > 0) return;
+      } else if (patchWithoutFloor.status === 400 || patchWithoutFloor.status === 404) {
+        leaderboardSupportsPlayerId = false;
+      }
+    }
 
-      const patchWithoutFloor = await tryPatchBy("player_id", entry.playerId, {
-        name: entry.name,
-        score: entry.score,
-        seed: entry.seed,
-        outcome: entry.outcome,
-      });
-      if (patchWithoutFloor.ok) return;
-
+    if (leaderboardSupportsPlayerId !== false) {
       const insertWithFloor = await tryInsertRow({
         player_id: entry.playerId,
         name: entry.name,
@@ -201,6 +208,8 @@ async function submitScore(entry: ScoreSubmission): Promise<void> {
         floor: entry.floor,
       });
       if (insertWithFloor.ok) return;
+      if (insertWithFloor.status === 409) return;
+      if (insertWithFloor.status === 400 || insertWithFloor.status === 404) leaderboardSupportsPlayerId = false;
 
       const insertWithoutFloor = await tryInsertRow({
         player_id: entry.playerId,
@@ -210,19 +219,21 @@ async function submitScore(entry: ScoreSubmission): Promise<void> {
         outcome: entry.outcome,
       });
       if (insertWithoutFloor.ok) return;
+      if (insertWithoutFloor.status === 409) return;
+      if (insertWithoutFloor.status === 400 || insertWithoutFloor.status === 404) leaderboardSupportsPlayerId = false;
     }
   }
 
-  const url = new URL(baseUrl);
-  url.searchParams.set("select", "score");
-  url.searchParams.set("name", `eq.${entry.name}`);
-  url.searchParams.set("order", "score.desc,created_at.desc");
-  url.searchParams.set("limit", "1");
-  const byNameRes = await fetch(url.toString(), { headers: readHeaders });
-  if (byNameRes.ok) {
-    const rows = (await byNameRes.json()) as Array<{ score: number }>;
-    const best = rows[0]?.score;
-    if (typeof best === "number" && Number.isFinite(best) && entry.score <= best) return;
+  const patchByName = await tryPatchByFilters({ name: `eq.${entry.name}`, score: `lt.${entry.score}` }, {
+    name: entry.name,
+    score: entry.score,
+    seed: entry.seed,
+    outcome: entry.outcome,
+    floor: entry.floor,
+  });
+  if (patchByName.ok) {
+    const changed = await readChangedRowsCount(patchByName);
+    if (changed != null && changed > 0) return;
   }
 
   const resWithFloor = await tryInsertRow({
@@ -334,7 +345,11 @@ export function App() {
     const name = playerName.trim() || "Player";
     if (!hasLeaderboardBackend()) return;
     const floor = floorIndex + 1;
-    submitScore({ playerId, name, score, seed, outcome, floor }).then(() => refreshLeaderboard()).catch(() => {});
+    submitScore({ playerId, name, score, seed, outcome, floor })
+      .then(() => refreshLeaderboard())
+      .catch((e) => {
+        setLeaderboardError(e instanceof Error ? e.message : String(e));
+      });
   }, [floorIndex, outcome, playerId, playerName, refreshLeaderboard, score, seed]);
 
   const attemptMove = useCallback(
