@@ -28,6 +28,7 @@ import { runEnemyTurn } from "./enemy-turn.js";
 import { generateFloor, gridDimsForFloor } from "../generation/floor.js";
 import type { PlayerInput, RunState } from "../run/state.js";
 import { grantXp } from "../entities/hero.js";
+import { keyTile } from "../world/grid.js";
 
 export type TurnResult = {
   readonly state: RunState;
@@ -68,7 +69,12 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
     return reject(state, "move_origin_mismatch", undefined, "Move origin does not match hero position");
   }
   if (!grid.inBounds(to)) return reject(state, "destination_oob", undefined, "Destination out of bounds");
-  if (cellEq(from, to)) return reject(state, "destination_same", undefined, "Destination equals origin");
+  if (cellEq(from, to)) {
+    const here = grid.get(from);
+    if (here.kind !== "key") {
+      return reject(state, "destination_same", undefined, "Destination equals origin");
+    }
+  }
 
   const distance = chebyshev(from, to);
   if (distance > hero.stride) {
@@ -83,7 +89,12 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
   const destTile = grid.get(to);
   if (destTile.anchored) return reject(state, "destination_anchored", undefined, "Destination is anchored");
   if (destTile.kind === "exit" && !currentFloor.exitUnlocked) {
-    return reject(state, "exit_locked", undefined, "Exit is locked — charge a lattice to unlock it");
+    return reject(
+      state,
+      currentFloor.exitRequiresKey ? "exit_locked_key" : "exit_locked",
+      undefined,
+      "Exit is locked",
+    );
   }
 
   const path = chebyshevPath(from, to);
@@ -106,10 +117,38 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
   let heroEntersDest = !destIsEnemy; // exit/empty/rune always enter; enemy depends on kill
 
   if (destIsEnemy) {
+    const destEnemyId =
+      destTile.payload && destTile.payload.kind === "enemy" ? destTile.payload.enemyId : null;
+    const shouldDropKeyHere =
+      destEnemyId !== null &&
+      currentFloor.exitRequiresKey &&
+      !currentFloor.exitUnlocked &&
+      currentFloor.keyEnemyId === destEnemyId;
+
     const combat = resolveCombatAt(nextState, to);
     nextState = combat.state;
     for (const e of combat.events) events.push(e);
     heroEntersDest = combat.enemyKilled;
+
+    if (combat.enemyKilled && shouldDropKeyHere) {
+      if (nextState.currentFloor.grid.get(to).kind !== "key") {
+        nextState = {
+          ...nextState,
+          currentFloor: {
+            ...nextState.currentFloor,
+            grid: nextState.currentFloor.grid.set(to, keyTile(`key-${state.turn}-${to.x}-${to.y}`)),
+            keyEnemyId: null,
+          },
+        };
+      }
+      const alreadyDropped = events.some(
+        (e) => e.type === "KEY_DROPPED" && cellEq(e.cell, to),
+      );
+      if (!alreadyDropped) events.push({ type: "KEY_DROPPED", cell: to });
+      heroEntersDest = false;
+    } else if (heroEntersDest && nextState.currentFloor.grid.get(to).kind === "key") {
+      heroEntersDest = false;
+    }
   } else if (!destIsExit) {
     const result = resolveTileAt(nextState, to);
     nextState = result.state;
@@ -122,7 +161,9 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
       ...nextState,
       hero: { ...nextState.hero, position: to },
     };
-    events.push({ type: "HERO_MOVED", from, to, path });
+    if (!cellEq(from, to)) {
+      events.push({ type: "HERO_MOVED", from, to, path });
+    }
   }
 
   // 3. Bump turn counter (so spawn RNG / death event use the new turn).

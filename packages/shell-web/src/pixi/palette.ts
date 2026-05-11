@@ -104,6 +104,7 @@ export const RUNE_PASSIVE: Record<Rune, { icon: string; amount: number } | null>
 export const HERO_EMOJI = "🐱";
 export const EXIT_EMOJI = "🚪";
 export const LOCK_EMOJI = "🔒";
+export const KEY_EMOJI = "🔑";
 
 export const EMOJI_FONT_FAMILY =
   '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "EmojiOne Color", "Twemoji Mozilla", system-ui, sans-serif';

@@ -27,6 +27,26 @@ export type ResolveResult = {
 
 export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
   const tile = state.currentFloor.grid.get(cell);
+  if (tile.kind === "key") {
+    const newGrid = state.currentFloor.grid.set(
+      cell,
+      emptyTile(`key-${state.turn}-${cell.x}-${cell.y}`),
+    );
+    return {
+      state: {
+        ...state,
+        currentFloor: {
+          ...state.currentFloor,
+          grid: newGrid,
+          exitUnlocked: true,
+        },
+      },
+      events: [
+        { type: "KEY_COLLECTED", cell },
+        { type: "EXIT_UNLOCKED" },
+      ],
+    };
+  }
   if (tile.kind !== "rune" || tile.rune === null) {
     return { state, events: [] };
   }

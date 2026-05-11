@@ -42,10 +42,7 @@ const BASE_WEIGHT = 1;
 export function spawnEndOfTurnRune(state: RunState): ResolveResult {
   const tutorialNeedsSpawns = state.currentFloor.index === 0 && !state.currentFloor.exitUnlocked;
 
-  if (
-    !tutorialNeedsSpawns &&
-    state.currentFloor.enemies.size === 0
-  ) {
+  if (!tutorialNeedsSpawns && state.currentFloor.enemies.size === 0) {
     return { state, events: [] };
   }
 

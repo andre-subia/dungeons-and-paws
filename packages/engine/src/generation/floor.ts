@@ -42,7 +42,14 @@ export function generateFloor(
 ): FloorState {
   const rng = new SeededRNG(`floor:${seed}:${floorIndex}`);
   const heroStart: Cell = { x: 0, y: dims.height - 1 };
-  const exitCell: Cell = { x: dims.width - 1, y: 0 };
+  const exitCandidates: Cell[] = [];
+  for (let y = 0; y < dims.height; y++) {
+    for (let x = 0; x < dims.width; x++) {
+      if (x === heroStart.x && y === heroStart.y) continue;
+      exitCandidates.push({ x, y });
+    }
+  }
+  const exitCell: Cell = rng.pick(exitCandidates);
 
   let grid = Grid.empty(dims, (i) => emptyTile(`f${floorIndex}-init-${i}`));
 
@@ -68,6 +75,10 @@ export function generateFloor(
 
   const lattices = recomputeLattices(grid);
 
+  const exitRequiresKey =
+    floorIndex > 0 && enemies.size > 0 ? rng.next() < 0.35 : false;
+  const keyEnemyId = exitRequiresKey ? (rng.pick(Array.from(enemies.keys())) as string) : null;
+
   return {
     index: floorIndex,
     grid,
@@ -75,7 +86,9 @@ export function generateFloor(
     lattices,
     heroStart,
     exitCell,
-    exitUnlocked: floorIndex > 0,
+    exitUnlocked: floorIndex > 0 && !exitRequiresKey,
+    exitRequiresKey,
+    keyEnemyId,
     turn: 0,
   };
 }

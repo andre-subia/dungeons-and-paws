@@ -24,6 +24,7 @@ import {
   ENEMY_EMOJI,
   EXIT_EMOJI,
   HERO_EMOJI,
+  KEY_EMOJI,
   LOCK_EMOJI,
   RUNE_EMOJI,
   RUNE_PASSIVE,
@@ -248,6 +249,10 @@ export class GridRenderer {
         this.addEmoji(RUNE_EMOJI[tile.rune], cx, cy, contentScale * TILE_EMOJI_SCALE);
         return;
       }
+      case "key": {
+        this.addEmoji(KEY_EMOJI, cx, cy, contentScale * TILE_EMOJI_SCALE);
+        return;
+      }
       case "enemy": {
         const enemyId =
           tile.payload && tile.payload.kind === "enemy" ? tile.payload.enemyId : null;
@@ -313,6 +318,26 @@ export class GridRenderer {
           contentScale,
           COLORS.attackStat,
         );
+
+        if (
+          state.currentFloor.exitRequiresKey &&
+          !state.currentFloor.exitUnlocked &&
+          state.currentFloor.keyEnemyId === enemy.id
+        ) {
+          const pad = Math.floor(contentScale * 0.06);
+          const key = new Text({
+            text: KEY_EMOJI,
+            style: {
+              fontFamily: EMOJI_FONT_FAMILY,
+              fontSize: Math.max(10, Math.floor(contentScale * 0.14)),
+              fill: COLORS.cornerStat,
+              fontWeight: "700",
+            },
+          });
+          key.anchor.set(0, 1);
+          key.position.set(cx - cardW / 2 + pad, cy + cardH / 2 - pad);
+          this.tileLayer.addChild(key);
+        }
         return;
       }
       case "exit": {
@@ -448,7 +473,8 @@ export class GridRenderer {
 
   private drawHero(): void {
     if (!this.currentState) return;
-    const { hero } = this.currentState;
+    const state = this.currentState;
+    const { hero } = state;
     this.heroLayer.removeChildren();
     const { cardW, cardH } = this.cardDims();
     const contentScale = cardW;
@@ -466,6 +492,21 @@ export class GridRenderer {
     emoji.anchor.set(0.5);
     emoji.position.set(cx, cy + cardH * 0.03);
     this.heroLayer.addChild(emoji);
+
+    const standingOn = state.currentFloor.grid.get(hero.position);
+    if (standingOn.kind === "key") {
+      const key = new Text({
+        text: KEY_EMOJI,
+        style: {
+          fontFamily: EMOJI_FONT_FAMILY,
+          fontSize: Math.floor(contentScale * 0.28),
+          fill: 0xffffff,
+        },
+      });
+      key.anchor.set(0.5);
+      key.position.set(cx, cy - cardH * 0.27);
+      this.heroLayer.addChild(key);
+    }
 
     this.addCornerIconValue(
       "♥",

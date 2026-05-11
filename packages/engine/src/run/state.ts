@@ -31,6 +31,8 @@ export type FloorState = {
   readonly heroStart: Cell;
   readonly exitCell: Cell;
   readonly exitUnlocked: boolean;
+  readonly exitRequiresKey: boolean;
+  readonly keyEnemyId: string | null;
   readonly turn: number;
 };
 

@@ -9,7 +9,7 @@ export function HUD() {
   const reset = useRunStore((s) => s.reset);
   const usePotion = useRunStore((s) => s.usePotion);
   const events = useRunStore((s) => s.lastEvents);
-  const lastEvent = events[events.length - 1];
+  const lastEvent = pickPrimaryEvent(events);
 
   const { hero, currentFloor, meta, turn, outcome } = state;
   const lattices = currentFloor.lattices;
@@ -254,6 +254,25 @@ function Overlay({
   );
 }
 
+function pickPrimaryEvent(
+  events: ReadonlyArray<NonNullable<ReturnType<typeof useRunStore.getState>["lastEvents"][number]>>,
+) {
+  const priority: string[] = [
+    "INPUT_REJECTED",
+    "HERO_DIED",
+    "KEY_COLLECTED",
+    "KEY_DROPPED",
+    "FLOOR_COMPLETED",
+    "EXIT_UNLOCKED",
+  ];
+  for (const p of priority) {
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i]?.type === p) return events[i];
+    }
+  }
+  return events[events.length - 1];
+}
+
 function LatticeStrip() {
   const state = useRunStore((s) => s.state);
   const lattices = state.currentFloor.lattices;
@@ -357,6 +376,10 @@ function formatEvent(e: NonNullable<ReturnType<typeof useRunStore.getState>["las
       return t("event.potionGained", { potions: e.potions, max: e.potionsMax });
     case "POTION_USED":
       return t("event.potionUsed", { healed: e.healed, potions: e.potions, max: e.potionsMax });
+    case "KEY_DROPPED":
+      return t("event.keyDropped");
+    case "KEY_COLLECTED":
+      return t("event.keyCollected");
     case "HERO_DAMAGED":
       return t("event.heroDamaged", { amount: e.amount });
     case "HERO_DIED":

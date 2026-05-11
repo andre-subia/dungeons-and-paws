@@ -110,5 +110,7 @@ export type GameEvent =
       readonly potions: number;
       readonly potionsMax: number;
     }
+  | { readonly type: "KEY_DROPPED"; readonly cell: Cell }
+  | { readonly type: "KEY_COLLECTED"; readonly cell: Cell }
   | { readonly type: "FLOOR_COMPLETED"; readonly floorIndex: number }
   | { readonly type: "HERO_DIED"; readonly atTurn: number };

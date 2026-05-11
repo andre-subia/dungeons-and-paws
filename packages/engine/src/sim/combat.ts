@@ -17,7 +17,7 @@
 
 import type { Cell } from "../core/types.js";
 import type { GameEvent } from "../core/events.js";
-import { emptyTile } from "../world/grid.js";
+import { emptyTile, keyTile } from "../world/grid.js";
 import type { RunState } from "../run/state.js";
 import { grantXp } from "../entities/hero.js";
 
@@ -39,13 +39,28 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
   const enemy = state.currentFloor.enemies.get(enemyId);
   if (!enemy) {
     // Stale tile referencing a missing enemy — clean it up.
+    const dropsKey =
+      state.currentFloor.exitRequiresKey &&
+      !state.currentFloor.exitUnlocked &&
+      (state.currentFloor.keyEnemyId === enemyId || state.currentFloor.enemies.size === 0);
     const grid = state.currentFloor.grid.set(
       cell,
-      emptyTile(`stale-${state.turn}-${cell.x}-${cell.y}`),
+      dropsKey
+        ? keyTile(`key-${state.turn}-${cell.x}-${cell.y}`)
+        : emptyTile(`stale-${state.turn}-${cell.x}-${cell.y}`),
     );
     return {
-      state: { ...state, currentFloor: { ...state.currentFloor, grid } },
-      events: [],
+      state: {
+        ...state,
+        currentFloor: {
+          ...state.currentFloor,
+          grid,
+          keyEnemyId: dropsKey ? null : state.currentFloor.keyEnemyId,
+        },
+      },
+      events: dropsKey
+        ? [{ type: "KEY_DROPPED", cell }, { type: "ENEMY_KILLED", enemyId, cell }]
+        : [],
       enemyKilled: true,
     };
   }
@@ -68,6 +83,7 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
   let nextGrid = state.currentFloor.grid;
   let nextHero = hero;
   let nextMeta = meta;
+  let nextKeyEnemyId = state.currentFloor.keyEnemyId;
   let killed = false;
 
   if (enemyHpAfter <= 0) {
@@ -75,11 +91,22 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
     const map = new Map(nextEnemies);
     map.delete(enemyId);
     nextEnemies = map;
+
+    const dropsKey =
+      state.currentFloor.exitRequiresKey &&
+      !state.currentFloor.exitUnlocked &&
+      (state.currentFloor.keyEnemyId === enemyId || nextEnemies.size === 0);
     nextGrid = nextGrid.set(
       cell,
-      emptyTile(`killed-${state.turn}-${cell.x}-${cell.y}`),
+      dropsKey
+        ? keyTile(`key-${state.turn}-${cell.x}-${cell.y}`)
+        : emptyTile(`killed-${state.turn}-${cell.x}-${cell.y}`),
     );
     events.push({ type: "ENEMY_KILLED", enemyId, cell });
+    if (dropsKey) {
+      events.push({ type: "KEY_DROPPED", cell });
+      nextKeyEnemyId = null;
+    }
     nextMeta = { ...nextMeta, score: nextMeta.score + 200 };
 
     const xpResult = grantXp(nextHero, 20);
@@ -123,6 +150,7 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
         ...state.currentFloor,
         grid: nextGrid,
         enemies: nextEnemies,
+        keyEnemyId: nextKeyEnemyId,
       },
     },
     events,

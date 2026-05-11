@@ -212,6 +212,11 @@ export function exitTile(id: string): Tile {
   return { id, kind: "exit", rune: null, hidden: false, anchored: false };
 }
 
+/** Convenience: a key tile (used to unlock exits on some floors). */
+export function keyTile(id: string): Tile {
+  return { id, kind: "key", rune: null, hidden: false, anchored: false };
+}
+
 /**
  * Convenience: an enemy tile.
  * The `rune` field is set to the enemy's rune so it counts toward

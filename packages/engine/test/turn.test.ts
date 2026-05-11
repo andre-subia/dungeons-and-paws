@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { applyInput } from "../src/sim/turn.js";
 import { type PlayerInput } from "../src/run/state.js";
 import { chebyshevPath } from "../src/sim/path.js";
-import { enemyTile, runeTile, STANDARD_GRID } from "../src/world/grid.js";
+import { enemyTile, keyTile, runeTile, STANDARD_GRID } from "../src/world/grid.js";
 import { recomputeLattices } from "../src/world/lattice.js";
 import { makeBlankRunState } from "./_helpers.js";
 
@@ -70,6 +70,30 @@ describe("turn pipeline — MOVE", () => {
       to: { x: 4, y: 4 },
     });
     expect(events[0]?.type).toBe("INPUT_REJECTED");
+  });
+
+  it("allows a no-op MOVE on a key tile to collect it and unlock the exit", () => {
+    let s0 = newRun();
+    s0 = {
+      ...s0,
+      currentFloor: {
+        ...s0.currentFloor,
+        exitUnlocked: false,
+        exitRequiresKey: true,
+        grid: s0.currentFloor.grid.set({ x: 4, y: 4 }, keyTile("k")),
+      },
+    };
+
+    const { state, events } = applyInput(s0, {
+      type: "MOVE",
+      from: { x: 4, y: 4 },
+      to: { x: 4, y: 4 },
+    });
+
+    expect(events.some((e) => e.type === "KEY_COLLECTED")).toBe(true);
+    expect(events.some((e) => e.type === "EXIT_UNLOCKED")).toBe(true);
+    expect(state.currentFloor.exitUnlocked).toBe(true);
+    expect(state.currentFloor.grid.get({ x: 4, y: 4 }).kind).toBe("empty");
   });
 
   it("does not mutate the input state object", () => {

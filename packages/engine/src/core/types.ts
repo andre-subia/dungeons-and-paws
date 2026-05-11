@@ -27,6 +27,7 @@ export const RUNE_COUNT = RUNES.length;
 export type TileKind =
   | "empty"
   | "rune"
+  | "key"
   | "enemy"
   | "treasure"
   | "hazard"

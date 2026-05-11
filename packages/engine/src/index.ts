@@ -41,6 +41,7 @@ export {
   emptyTile,
   runeTile,
   exitTile,
+  keyTile,
   enemyTile,
 } from "./world/grid.js";
 export type { GridDimensions } from "./world/grid.js";

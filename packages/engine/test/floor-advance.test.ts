@@ -4,23 +4,39 @@ import { makeInitialRunState } from "../src/run/state.js";
 import { generateFloor } from "../src/generation/floor.js";
 import { PUZZLE_GRID } from "../src/world/grid.js";
 
+function adjacentTo(c: { x: number; y: number }, w: number, h: number) {
+  const candidates = [
+    { x: c.x - 1, y: c.y },
+    { x: c.x + 1, y: c.y },
+    { x: c.x, y: c.y - 1 },
+    { x: c.x, y: c.y + 1 },
+  ];
+  for (const k of candidates) {
+    if (k.x >= 0 && k.x < w && k.y >= 0 && k.y < h) return k;
+  }
+  return c;
+}
+
 describe("floor advance + win", () => {
   it("generateFloor produces a floor with heroStart, exitCell and an exit tile", () => {
     const f = generateFloor("ADV-01", 0, PUZZLE_GRID);
     expect(f.index).toBe(0);
     expect(f.heroStart).toEqual({ x: 0, y: PUZZLE_GRID.height - 1 });
-    expect(f.exitCell).toEqual({ x: PUZZLE_GRID.width - 1, y: 0 });
+    expect(f.exitCell).not.toEqual(f.heroStart);
     expect(f.grid.get(f.exitCell).kind).toBe("exit");
   });
 
   it("stepping onto the exit advances to the next floor", () => {
     const state = makeInitialRunState({ seed: "ADV-02" });
-    // The exit is at (size-1, 0). Place hero adjacent so we can step on it.
-    const adjacent = { x: state.currentFloor.exitCell.x - 1, y: 1 };
+    const adjacent = adjacentTo(
+      state.currentFloor.exitCell,
+      state.currentFloor.grid.width,
+      state.currentFloor.grid.height,
+    );
     const stateAdjacent = {
       ...state,
       hero: { ...state.hero, position: adjacent },
-      currentFloor: { ...state.currentFloor, exitUnlocked: true },
+      currentFloor: { ...state.currentFloor, exitUnlocked: true, exitRequiresKey: false },
     };
     const result = applyInput(stateAdjacent, {
       type: "MOVE",
@@ -38,11 +54,15 @@ describe("floor advance + win", () => {
       seed: "ADV-03",
       config: { maxFloors: 1 },
     });
-    const adjacent = { x: state.currentFloor.exitCell.x - 1, y: 1 };
+    const adjacent = adjacentTo(
+      state.currentFloor.exitCell,
+      state.currentFloor.grid.width,
+      state.currentFloor.grid.height,
+    );
     const stateAdjacent = {
       ...state,
       hero: { ...state.hero, position: adjacent },
-      currentFloor: { ...state.currentFloor, exitUnlocked: true },
+      currentFloor: { ...state.currentFloor, exitUnlocked: true, exitRequiresKey: false },
     };
     const result = applyInput(stateAdjacent, {
       type: "MOVE",
@@ -54,11 +74,15 @@ describe("floor advance + win", () => {
 
   it("exit transition does NOT spawn a rune for that turn", () => {
     const state = makeInitialRunState({ seed: "ADV-04", config: { maxFloors: 2 } });
-    const adjacent = { x: state.currentFloor.exitCell.x - 1, y: 1 };
+    const adjacent = adjacentTo(
+      state.currentFloor.exitCell,
+      state.currentFloor.grid.width,
+      state.currentFloor.grid.height,
+    );
     const stateAdjacent = {
       ...state,
       hero: { ...state.hero, position: adjacent },
-      currentFloor: { ...state.currentFloor, exitUnlocked: true },
+      currentFloor: { ...state.currentFloor, exitUnlocked: true, exitRequiresKey: false },
     };
     const result = applyInput(stateAdjacent, {
       type: "MOVE",
