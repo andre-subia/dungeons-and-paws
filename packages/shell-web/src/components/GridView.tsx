@@ -69,6 +69,7 @@ export function GridView({ animSpeed, onMove }: { animSpeed: number; onMove: (ce
   return (
     <div
       ref={hostRef}
+      data-grid-host="true"
       style={{
         flex: 1,
         minHeight: 0,

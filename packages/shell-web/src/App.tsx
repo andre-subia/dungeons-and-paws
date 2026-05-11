@@ -22,6 +22,7 @@ const ANIM_SPEED_STORAGE_KEY = "gridlore:animSpeed";
 const HAPTICS_STORAGE_KEY = "gridlore:hapticsEnabled";
 const SWIPE_SENSITIVITY_STORAGE_KEY = "gridlore:swipeSensitivity";
 const PLAYER_NAME_STORAGE_KEY = "gridlore:playerName";
+const PLAYER_ID_STORAGE_KEY = "gridlore:playerId";
 const DEFAULT_ANIM_SPEED = 0.7;
 const DEFAULT_HAPTICS_ENABLED = true;
 const DEFAULT_SWIPE_SENSITIVITY = 1.25;
@@ -30,6 +31,7 @@ const DEFAULT_PLAYER_NAME = "";
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? "";
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
 const LEADERBOARD_TABLE = (import.meta.env.VITE_SUPABASE_LEADERBOARD_TABLE as string | undefined) ?? "leaderboard_entries";
+let leaderboardSupportsPlayerId: boolean | null = null;
 
 function readAnimSpeed(): number {
   try {
@@ -74,7 +76,12 @@ type LeaderboardEntry = {
   readonly score: number;
   readonly ts: number;
   readonly seed: string;
+  readonly floor: number;
   readonly outcome: Exclude<RunOutcome, "in_progress">;
+};
+
+type ScoreSubmission = Omit<LeaderboardEntry, "ts"> & {
+  readonly playerId: string;
 };
 
 function hasLeaderboardBackend(): boolean {
@@ -91,38 +98,149 @@ function supabaseHeaders(): HeadersInit {
 
 async function fetchGlobalLeaderboard(limit = 20): Promise<LeaderboardEntry[]> {
   if (!hasLeaderboardBackend()) return [];
-  const url = new URL(`${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/${LEADERBOARD_TABLE}`);
-  url.searchParams.set("select", "name,score,created_at,seed,outcome");
-  url.searchParams.set("order", "score.desc,created_at.desc");
-  url.searchParams.set("limit", String(limit));
+  const baseUrl = `${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/${LEADERBOARD_TABLE}`;
+  const headers = { ...supabaseHeaders(), Accept: "application/json" };
+  const buildUrl = (select: string) => {
+    const url = new URL(baseUrl);
+    url.searchParams.set("select", select);
+    url.searchParams.set("order", "score.desc,created_at.desc");
+    url.searchParams.set("limit", String(limit));
+    return url.toString();
+  };
 
-  const res = await fetch(url.toString(), { headers: { ...supabaseHeaders(), Accept: "application/json" } });
+  const resWithFloor = await fetch(buildUrl("name,score,created_at,seed,outcome,floor"), { headers });
+  const res = resWithFloor.ok ? resWithFloor : await fetch(buildUrl("name,score,created_at,seed,outcome"), { headers });
   if (!res.ok) throw new Error(`leaderboard fetch failed (${res.status})`);
+
   const data = (await res.json()) as Array<{
     name: string;
     score: number;
     created_at: string;
     seed: string;
     outcome: "win" | "death";
+    floor?: number | null;
   }>;
   return data.map((r) => ({
     name: r.name,
     score: r.score,
     ts: Date.parse(r.created_at) || Date.now(),
     seed: r.seed,
+    floor: typeof r.floor === "number" && Number.isFinite(r.floor) && r.floor > 0 ? r.floor : 1,
     outcome: r.outcome,
   }));
 }
 
-async function submitScore(entry: Omit<LeaderboardEntry, "ts">): Promise<void> {
+async function submitScore(entry: ScoreSubmission): Promise<void> {
   if (!hasLeaderboardBackend()) return;
-  const url = `${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/${LEADERBOARD_TABLE}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { ...supabaseHeaders(), Prefer: "return=minimal" },
-    body: JSON.stringify([{ name: entry.name, score: entry.score, seed: entry.seed, outcome: entry.outcome }]),
+  const baseUrl = `${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/${LEADERBOARD_TABLE}`;
+  const writeHeaders = { ...supabaseHeaders(), Prefer: "return=minimal" };
+  const readHeaders = { ...supabaseHeaders(), Accept: "application/json" };
+
+  const tryInsertRow = async (row: Record<string, unknown>) => {
+    return fetch(baseUrl, {
+      method: "POST",
+      headers: writeHeaders,
+      body: JSON.stringify([row]),
+    });
+  };
+
+  const tryPatchBy = async (column: string, value: string, body: Record<string, unknown>) => {
+    const url = new URL(baseUrl);
+    url.searchParams.set(column, `eq.${value}`);
+    return fetch(url.toString(), {
+      method: "PATCH",
+      headers: writeHeaders,
+      body: JSON.stringify(body),
+    });
+  };
+
+  const tryReadBestByPlayerId = async (): Promise<number | null> => {
+    const url = new URL(baseUrl);
+    url.searchParams.set("select", "score");
+    url.searchParams.set("player_id", `eq.${entry.playerId}`);
+    url.searchParams.set("limit", "1");
+    const res = await fetch(url.toString(), { headers: readHeaders });
+    if (!res.ok) {
+      if (res.status === 400 || res.status === 404) leaderboardSupportsPlayerId = false;
+      return null;
+    }
+    leaderboardSupportsPlayerId = true;
+    const rows = (await res.json()) as Array<{ score: number }>;
+    const s = rows[0]?.score;
+    return typeof s === "number" && Number.isFinite(s) ? s : null;
+  };
+
+  if (leaderboardSupportsPlayerId !== false) {
+    const best = await tryReadBestByPlayerId();
+    if (best != null && entry.score <= best) return;
+
+    if (leaderboardSupportsPlayerId === true) {
+      const patchWithFloor = await tryPatchBy("player_id", entry.playerId, {
+        name: entry.name,
+        score: entry.score,
+        seed: entry.seed,
+        outcome: entry.outcome,
+        floor: entry.floor,
+      });
+      if (patchWithFloor.ok) return;
+
+      const patchWithoutFloor = await tryPatchBy("player_id", entry.playerId, {
+        name: entry.name,
+        score: entry.score,
+        seed: entry.seed,
+        outcome: entry.outcome,
+      });
+      if (patchWithoutFloor.ok) return;
+
+      const insertWithFloor = await tryInsertRow({
+        player_id: entry.playerId,
+        name: entry.name,
+        score: entry.score,
+        seed: entry.seed,
+        outcome: entry.outcome,
+        floor: entry.floor,
+      });
+      if (insertWithFloor.ok) return;
+
+      const insertWithoutFloor = await tryInsertRow({
+        player_id: entry.playerId,
+        name: entry.name,
+        score: entry.score,
+        seed: entry.seed,
+        outcome: entry.outcome,
+      });
+      if (insertWithoutFloor.ok) return;
+    }
+  }
+
+  const url = new URL(baseUrl);
+  url.searchParams.set("select", "score");
+  url.searchParams.set("name", `eq.${entry.name}`);
+  url.searchParams.set("order", "score.desc,created_at.desc");
+  url.searchParams.set("limit", "1");
+  const byNameRes = await fetch(url.toString(), { headers: readHeaders });
+  if (byNameRes.ok) {
+    const rows = (await byNameRes.json()) as Array<{ score: number }>;
+    const best = rows[0]?.score;
+    if (typeof best === "number" && Number.isFinite(best) && entry.score <= best) return;
+  }
+
+  const resWithFloor = await tryInsertRow({
+    name: entry.name,
+    score: entry.score,
+    seed: entry.seed,
+    outcome: entry.outcome,
+    floor: entry.floor,
   });
-  if (!res.ok) throw new Error(`leaderboard insert failed (${res.status})`);
+  if (resWithFloor.ok) return;
+
+  const resWithoutFloor = await tryInsertRow({
+    name: entry.name,
+    score: entry.score,
+    seed: entry.seed,
+    outcome: entry.outcome,
+  });
+  if (!resWithoutFloor.ok) throw new Error(`leaderboard insert failed (${resWithoutFloor.status})`);
 }
 
 function readPlayerName(): string {
@@ -134,6 +252,30 @@ function readPlayerName(): string {
   }
 }
 
+function generateUuid(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function readOrCreatePlayerId(): string {
+  try {
+    const existing = (localStorage.getItem(PLAYER_ID_STORAGE_KEY) ?? "").trim();
+    if (existing !== "") return existing;
+    const next = generateUuid();
+    localStorage.setItem(PLAYER_ID_STORAGE_KEY, next);
+    return next;
+  } catch {
+    return generateUuid();
+  }
+}
+
 export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -142,6 +284,7 @@ export function App() {
   const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
   const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, DEFAULT_HAPTICS_ENABLED));
   const [swipeSensitivity, setSwipeSensitivity] = useState(readSwipeSensitivity);
+  const [playerId] = useState(readOrCreatePlayerId);
   const [playerName, setPlayerName] = useState(() => readPlayerName() || DEFAULT_PLAYER_NAME);
   const [namePromptOpen, setNamePromptOpen] = useState(() => !readPlayerName());
   const [nameDraft, setNameDraft] = useState(() => readPlayerName());
@@ -184,14 +327,15 @@ export function App() {
       lastRecordedRef.current = "";
       return;
     }
-    const key = `${seed}:${outcome}:${score}`;
+    const key = `${seed}:${outcome}:${score}:${floorIndex}`;
     if (lastRecordedRef.current === key) return;
     lastRecordedRef.current = key;
 
     const name = playerName.trim() || "Player";
     if (!hasLeaderboardBackend()) return;
-    submitScore({ name, score, seed, outcome }).then(() => refreshLeaderboard()).catch(() => {});
-  }, [outcome, playerName, refreshLeaderboard, score, seed]);
+    const floor = floorIndex + 1;
+    submitScore({ playerId, name, score, seed, outcome, floor }).then(() => refreshLeaderboard()).catch(() => {});
+  }, [floorIndex, outcome, playerId, playerName, refreshLeaderboard, score, seed]);
 
   const attemptMove = useCallback(
     (to: Cell, source: "tap" | "keyboard") => {
@@ -353,7 +497,6 @@ export function App() {
   }, [attemptMove]);
 
   useEffect(() => {
-    const thresholdPx = clamp(Math.round(28 / swipeSensitivity), 10, 60);
     let active:
       | {
           id: number;
@@ -362,31 +505,73 @@ export function App() {
           lastX: number;
           lastY: number;
           moved: boolean;
+          cellPx: number;
+          thresholdPx: number;
+          thresholdCells: number;
           kind: "pointer" | "touch";
         }
       | null = null;
+
+    function readGridCellPx(): number {
+      const host = document.querySelector('[data-grid-host="true"]');
+      if (!(host instanceof HTMLElement)) return 0;
+      const rect = host.getBoundingClientRect();
+      if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height) || rect.width <= 0 || rect.height <= 0) return 0;
+      const snap = useRunStore.getState().state;
+      const grid = snap.currentFloor.grid;
+      const px = Math.min(rect.width / grid.width, rect.height / grid.height);
+      if (!Number.isFinite(px) || px <= 0) return 0;
+      return px;
+    }
+
+    function thresholdsFor(cellPx: number): { thresholdPx: number; thresholdCells: number } {
+      const thresholdCells = clamp(0.5 / swipeSensitivity, 0.25, 0.75);
+      const fallbackPx = clamp(Math.round(22 / swipeSensitivity), 10, 60);
+      const thresholdPx = cellPx > 0 ? clamp(Math.round(cellPx * thresholdCells), 10, 120) : fallbackPx;
+      return { thresholdPx, thresholdCells };
+    }
 
     function isSwipeExemptTarget(t: EventTarget | null): boolean {
       if (!t || !(t instanceof Element)) return false;
       return Boolean(t.closest('[data-swipe-exempt="true"]'));
     }
 
-    function directionFromDelta(dx: number, dy: number): { dx: -1 | 0 | 1; dy: -1 | 0 | 1 } | null {
-      const adx = Math.abs(dx);
-      const ady = Math.abs(dy);
-      if (adx < thresholdPx && ady < thresholdPx) return null;
+    function directionFromDelta(
+      dx: number,
+      dy: number,
+      cellPx: number,
+      thresholdPx: number,
+      thresholdCells: number,
+    ): { dx: -1 | 0 | 1; dy: -1 | 0 | 1 } | null {
+      const dist = Math.hypot(dx, dy);
+      if (dist < thresholdPx) return null;
 
-      const diagGate = thresholdPx * 0.6;
-      const sx = dx > 0 ? 1 : dx < 0 ? -1 : 0;
-      const sy = dy > 0 ? 1 : dy < 0 ? -1 : 0;
-      if (adx >= diagGate && ady >= diagGate) return { dx: sx as -1 | 0 | 1, dy: sy as -1 | 0 | 1 };
+      if (cellPx <= 0) {
+        const ax = Math.abs(dx);
+        const ay = Math.abs(dy);
+        const sx: -1 | 0 | 1 = dx === 0 ? 0 : dx > 0 ? 1 : -1;
+        const sy: -1 | 0 | 1 = dy === 0 ? 0 : dy > 0 ? 1 : -1;
+        if (ax === 0 && ay === 0) return null;
+        if (ax > ay) return { dx: sx, dy: 0 };
+        return { dx: 0, dy: sy };
+      }
 
-      if (adx >= ady) return { dx: sx as -1 | 0 | 1, dy: 0 };
-      return { dx: 0, dy: sy as -1 | 0 | 1 };
+      const dxCells = dx / cellPx;
+      const dyCells = dy / cellPx;
+
+      const outDx: -1 | 0 | 1 = Math.abs(dxCells) >= thresholdCells ? (dxCells > 0 ? 1 : -1) : 0;
+      const outDy: -1 | 0 | 1 = Math.abs(dyCells) >= thresholdCells ? (dyCells > 0 ? 1 : -1) : 0;
+      if (outDx === 0 && outDy === 0) return null;
+      return { dx: outDx, dy: outDy };
     }
 
-    function handleEnd(dx: number, dy: number, prevent: () => void) {
-      const dir = directionFromDelta(dx, dy);
+    function handleEnd(
+      dx: number,
+      dy: number,
+      thresholds: { cellPx: number; thresholdPx: number; thresholdCells: number },
+      prevent: () => void,
+    ) {
+      const dir = directionFromDelta(dx, dy, thresholds.cellPx, thresholds.thresholdPx, thresholds.thresholdCells);
       if (!dir || (dir.dx === 0 && dir.dy === 0)) return;
 
       const store = useRunStore.getState();
@@ -426,6 +611,8 @@ export function App() {
       if (!e.isPrimary) return;
       if (active) return;
       if (isSwipeExemptTarget(e.target)) return;
+      const cellPx = readGridCellPx();
+      const { thresholdPx, thresholdCells } = thresholdsFor(cellPx);
       active = {
         id: e.pointerId,
         startX: e.clientX,
@@ -433,6 +620,9 @@ export function App() {
         lastX: e.clientX,
         lastY: e.clientY,
         moved: false,
+        cellPx,
+        thresholdPx,
+        thresholdCells,
         kind: "pointer",
       };
     }
@@ -443,7 +633,7 @@ export function App() {
       active.lastY = e.clientY;
       const dx = active.lastX - active.startX;
       const dy = active.lastY - active.startY;
-      if (!active.moved && Math.hypot(dx, dy) >= thresholdPx) active.moved = true;
+      if (!active.moved && Math.hypot(dx, dy) >= active.thresholdPx) active.moved = true;
       if (active.moved) e.preventDefault();
     }
 
@@ -452,9 +642,10 @@ export function App() {
       const dx = active.lastX - active.startX;
       const dy = active.lastY - active.startY;
       const moved = active.moved;
+      const thresholds = { cellPx: active.cellPx, thresholdPx: active.thresholdPx, thresholdCells: active.thresholdCells };
       active = null;
       if (!moved) return;
-      handleEnd(dx, dy, () => e.preventDefault());
+      handleEnd(dx, dy, thresholds, () => e.preventDefault());
     }
 
     function onPointerCancel(e: PointerEvent) {
@@ -467,6 +658,8 @@ export function App() {
       if (isSwipeExemptTarget(e.target)) return;
       const t = e.changedTouches[0];
       if (!t) return;
+      const cellPx = readGridCellPx();
+      const { thresholdPx, thresholdCells } = thresholdsFor(cellPx);
       active = {
         id: t.identifier,
         startX: t.clientX,
@@ -474,6 +667,9 @@ export function App() {
         lastX: t.clientX,
         lastY: t.clientY,
         moved: false,
+        cellPx,
+        thresholdPx,
+        thresholdCells,
         kind: "touch",
       };
     }
@@ -486,7 +682,7 @@ export function App() {
       active.lastY = t.clientY;
       const dx = active.lastX - active.startX;
       const dy = active.lastY - active.startY;
-      if (!active.moved && Math.hypot(dx, dy) >= thresholdPx) active.moved = true;
+      if (!active.moved && Math.hypot(dx, dy) >= active.thresholdPx) active.moved = true;
       if (active.moved) e.preventDefault();
     }
 
@@ -497,9 +693,10 @@ export function App() {
       const dx = active.lastX - active.startX;
       const dy = active.lastY - active.startY;
       const moved = active.moved;
+      const thresholds = { cellPx: active.cellPx, thresholdPx: active.thresholdPx, thresholdCells: active.thresholdCells };
       active = null;
       if (!moved) return;
-      handleEnd(dx, dy, () => e.preventDefault());
+      handleEnd(dx, dy, thresholds, () => e.preventDefault());
     }
 
     function onTouchCancel() {
@@ -525,7 +722,7 @@ export function App() {
       window.removeEventListener("touchend", onTouchEnd, true);
       window.removeEventListener("touchcancel", onTouchCancel, true);
     };
-  }, [hapticsEnabled, trigger, attemptMove, swipeSensitivity]);
+  }, [hapticsEnabled, trigger, swipeSensitivity]);
 
   function updateAnimSpeed(v: number) {
     const clamped = Math.max(0.2, Math.min(2, v));
@@ -881,22 +1078,25 @@ export function App() {
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                 <div style={{ opacity: 0.85 }}>{t("settings.playerName")}</div>
-                <button
-                  onClick={() => setNamePromptOpen(true)}
-                  style={{
-                    background: "transparent",
-                    color: "#e9e7d8",
-                    border: "1px solid #2a2a3e",
-                    borderRadius: 8,
-                    padding: "6px 8px",
-                    fontFamily: "inherit",
-                    fontSize: 12,
-                    cursor: "pointer",
-                    opacity: 0.95,
-                  }}
-                >
-                  {playerName.trim() || "Player"}
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ opacity: 0.8, letterSpacing: 0 }}>{playerName.trim() || "Player"}</span>
+                  <button
+                    onClick={() => setNamePromptOpen(true)}
+                    style={{
+                      background: "transparent",
+                      color: "#e9e7d8",
+                      border: "1px solid #2a2a3e",
+                      borderRadius: 8,
+                      padding: "6px 8px",
+                      fontFamily: "inherit",
+                      fontSize: 12,
+                      cursor: "pointer",
+                      opacity: 0.95,
+                    }}
+                  >
+                    {t("settings.editName")}
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: "grid", gap: 6 }}>
@@ -1049,7 +1249,9 @@ export function App() {
                       style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12 }}
                     >
                       <span style={{ opacity: 0.9 }}>{`${idx + 1}. ${e.name}`}</span>
-                      <span style={{ opacity: 0.8, letterSpacing: 0 }}>{e.score}</span>
+                      <span style={{ opacity: 0.8, letterSpacing: 0 }}>
+                        {`🏆 ${e.score} · ${t("hud.floorLabel")} ${e.floor}`}
+                      </span>
                     </div>
                   ))}
                 </div>
