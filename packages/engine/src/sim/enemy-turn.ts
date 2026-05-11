@@ -25,15 +25,20 @@ export type EnemyTurnResult = {
   readonly events: readonly GameEvent[];
 };
 
-export function runEnemyTurn(state: RunState): EnemyTurnResult {
+export function runEnemyTurn(
+  state: RunState,
+  opts?: { readonly skipEnemyIds?: ReadonlySet<string> },
+): EnemyTurnResult {
   const events: GameEvent[] = [];
   let nextState = state;
+  const skip = opts?.skipEnemyIds;
 
   // Sort by id for deterministic action order.
   const ids = Array.from(state.currentFloor.enemies.keys()).sort();
 
   for (const id of ids) {
     if (nextState.outcome !== "in_progress") break;
+    if (skip?.has(id)) continue;
     const enemy = nextState.currentFloor.enemies.get(id);
     if (!enemy) continue;
     const result = takeEnemyAction(nextState, enemy);

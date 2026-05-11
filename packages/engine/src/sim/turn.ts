@@ -99,6 +99,7 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
 
   const path = chebyshevPath(from, to);
   const events: GameEvent[] = [{ type: "TURN_STARTED", turn: state.turn + 1 }];
+  let skipEnemyIds: Set<string> | undefined;
 
   // 1. Resolve each path cell EXCEPT the destination — destination
   //    handling is special (exit ends the floor; rune-at-dest is consumed;
@@ -149,6 +150,10 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
     } else if (heroEntersDest && nextState.currentFloor.grid.get(to).kind === "key") {
       heroEntersDest = false;
     }
+
+    if (!combat.enemyKilled && destEnemyId !== null) {
+      skipEnemyIds = new Set([destEnemyId]);
+    }
   } else if (!destIsExit) {
     const result = resolveTileAt(nextState, to);
     nextState = result.state;
@@ -192,7 +197,7 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
     nextState = transitionFloor(nextState, events);
   } else {
     // 5a. Enemy turn — each enemy moves toward hero or attacks if adjacent.
-    const enemyTurn = runEnemyTurn(nextState);
+    const enemyTurn = runEnemyTurn(nextState, { skipEnemyIds });
     nextState = enemyTurn.state;
     for (const e of enemyTurn.events) events.push(e);
 

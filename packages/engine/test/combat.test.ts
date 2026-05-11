@@ -148,6 +148,18 @@ describe("turn pipeline + combat", () => {
     expect(result.events.some((e) => e.type === "KEY_DROPPED")).toBe(true);
   });
 
+  it("enemy does not hit twice in one turn when it survives the bump combat", () => {
+    let state = makeBlankRunState({ seed: "T-HIT-ONCE", heroSpawn: { x: 0, y: 0 }, dims: SMALL_GRID });
+    state = { ...state, hero: { ...state.hero, hp: 5, armor: 0 } };
+    state = placeEnemy(state, { x: 1, y: 0 }, "skeleton"); // attack=1, hp>1
+
+    const result = applyInput(state, { type: "MOVE", from: { x: 0, y: 0 }, to: { x: 1, y: 0 } });
+    expect(result.state.hero.hp).toBe(4);
+
+    const heroDamagedEvents = result.events.filter((e) => e.type === "HERO_DAMAGED");
+    expect(heroDamagedEvents).toHaveLength(1);
+  });
+
   it("walking onto a tougher enemy keeps the hero in place if it survives", () => {
     let state = makeBlankRunState({ seed: "T-02", heroSpawn: { x: 0, y: 0 }, dims: SMALL_GRID });
     state = placeEnemy(state, { x: 1, y: 0 }, "slime"); // 3 HP
