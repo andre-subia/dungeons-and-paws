@@ -7,6 +7,9 @@ export type HeroState = {
   readonly hpMax: number;
   readonly level: number;
   readonly xp: number;
+  readonly potions: number;
+  readonly potionsMax: number;
+  readonly brambleProgress: number;
   readonly stride: number;
   readonly attack: number;
   readonly focus: number;
@@ -46,7 +49,6 @@ export function grantXp(hero: HeroState, amount: number): XpGainResult {
   let xp = hero.xp + Math.max(0, Math.floor(amount));
   let level = hero.level;
   let hpMax = hero.hpMax;
-  const hp = hero.hp;
   let gained = 0;
 
   while (xp >= xpToNextLevel(level)) {
@@ -72,6 +74,9 @@ export function spawnHero(template: HeroTemplate, position: Cell): HeroState {
     hpMax: template.hpMax,
     level: 1,
     xp: 0,
+    potions: 2,
+    potionsMax: 2,
+    brambleProgress: 0,
     stride: template.stride,
     attack: template.attack,
     focus: template.focusMax,

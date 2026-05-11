@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { GridView } from "./components/GridView.js";
 import { HUD } from "./components/HUD.js";
 import { LOCALES, getLocale, setLocale, subscribeLocaleChange, t } from "./i18n.js";
+import { useRunStore } from "./state/store.js";
 
 /** Order of sections rendered in the help modal. Keys mirror i18n. */
 const HELP_SECTIONS = [
@@ -18,6 +19,7 @@ const HELP_SECTIONS = [
 export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
+  const score = useRunStore((s) => s.state.meta.score);
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
 
   function cycleLocale() {
@@ -83,8 +85,18 @@ export function App() {
         >
           {localeFlag(getLocale())}
         </button>
-        <div style={{ flex: 1, textAlign: "center", pointerEvents: "none" }}>
-          {t("app.title")}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "baseline",
+            gap: 10,
+            pointerEvents: "none",
+          }}
+        >
+          <span>{t("app.title")}</span>
+          <span style={{ opacity: 0.75, letterSpacing: 0 }}>{`🏆 ${score}`}</span>
         </div>
         <button
           onClick={() => setHelpOpen(true)}

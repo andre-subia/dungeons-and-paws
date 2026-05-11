@@ -19,6 +19,8 @@ export type RunStore = {
   lastEvents: readonly GameEvent[];
   /** Attempt a move. Returns true if accepted. */
   move: (to: Cell) => boolean;
+  /** Use a health potion. Returns true if accepted. */
+  usePotion: () => boolean;
   /** Reset to a fresh run with a new seed. */
   reset: (seed?: string) => void;
 };
@@ -40,6 +42,13 @@ export const useRunStore = create<RunStore>((set, get) => ({
       from: state.hero.position,
       to,
     });
+    set({ state: result.state, lastEvents: result.events });
+    return result.state !== state;
+  },
+  usePotion() {
+    const { state } = get();
+    if (state.outcome !== "in_progress") return false;
+    const result = applyInput(state, { type: "USE_POTION" });
     set({ state: result.state, lastEvents: result.events });
     return result.state !== state;
   },

@@ -109,6 +109,8 @@ const DICTS: Record<Locale, Dict> = {
     "event.enemyKilled": "✗ enemy slain",
     "event.heroDamaged": "! you took {amount}",
     "event.heroLeveledUp": "↑ level {level} · ♥ max {hpMax}",
+    "event.potionGained": "🧪 potion +1 ({potions}/{max})",
+    "event.potionUsed": "🧪 used +{healed} ♥ ({potions}/{max})",
     "event.heroDied": "☠ you died",
 
     "reject.run_over": "Run is over ({outcome})",
@@ -120,6 +122,8 @@ const DICTS: Record<Locale, Dict> = {
     "reject.destination_beyond_stride": "Destination beyond stride ({distance} > {stride})",
     "reject.destination_anchored": "Destination is anchored",
     "reject.exit_locked": "Exit is locked — charge a lattice to unlock it",
+    "reject.no_potions": "No potions",
+    "reject.hp_full": "HP is already full",
 
     "tile.exit": "EXIT",
     "tile.lock": "LOCK",
@@ -235,6 +239,8 @@ const DICTS: Record<Locale, Dict> = {
     "event.enemyKilled": "✗ enemigo derrotado",
     "event.heroDamaged": "! recibiste {amount}",
     "event.heroLeveledUp": "↑ nivel {level} · ♥ máx {hpMax}",
+    "event.potionGained": "🧪 poción +1 ({potions}/{max})",
+    "event.potionUsed": "🧪 usada +{healed} ♥ ({potions}/{max})",
     "event.heroDied": "☠ has muerto",
 
     "reject.run_over": "La partida terminó ({outcome})",
@@ -246,6 +252,8 @@ const DICTS: Record<Locale, Dict> = {
     "reject.destination_beyond_stride": "Destino fuera de alcance ({distance} > {stride})",
     "reject.destination_anchored": "El destino está anclado",
     "reject.exit_locked": "La salida está bloqueada — carga una lattice para desbloquearla",
+    "reject.no_potions": "No tienes pociones",
+    "reject.hp_full": "Ya tienes la vida al máximo",
 
     "tile.exit": "SALIR",
     "tile.lock": "BLOQ",
@@ -361,6 +369,8 @@ const DICTS: Record<Locale, Dict> = {
     "event.enemyKilled": "✗ inimigo derrotado",
     "event.heroDamaged": "! você levou {amount}",
     "event.heroLeveledUp": "↑ nível {level} · ♥ máx {hpMax}",
+    "event.potionGained": "🧪 poção +1 ({potions}/{max})",
+    "event.potionUsed": "🧪 usada +{healed} ♥ ({potions}/{max})",
     "event.heroDied": "☠ você morreu",
 
     "reject.run_over": "A partida acabou ({outcome})",
@@ -372,6 +382,8 @@ const DICTS: Record<Locale, Dict> = {
     "reject.destination_beyond_stride": "Destino fora do alcance ({distance} > {stride})",
     "reject.destination_anchored": "O destino está ancorado",
     "reject.exit_locked": "A saída está bloqueada — carregue uma lattice para destravar",
+    "reject.no_potions": "Sem poções",
+    "reject.hp_full": "HP já está cheio",
 
     "tile.exit": "SAIR",
     "tile.lock": "TRAVA",

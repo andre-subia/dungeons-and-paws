@@ -99,5 +99,16 @@ export type GameEvent =
       readonly level: number;
       readonly hpMax: number;
     }
+  | {
+      readonly type: "POTION_GAINED";
+      readonly potions: number;
+      readonly potionsMax: number;
+    }
+  | {
+      readonly type: "POTION_USED";
+      readonly healed: number;
+      readonly potions: number;
+      readonly potionsMax: number;
+    }
   | { readonly type: "FLOOR_COMPLETED"; readonly floorIndex: number }
   | { readonly type: "HERO_DIED"; readonly atTurn: number };

@@ -43,6 +43,22 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
     events.push({ type: "HERO_LEVELED_UP", level: nextHero.level, hpMax: nextHero.hpMax });
   }
 
+  if (tile.rune === "bramble") {
+    let progress = nextHero.brambleProgress + 1;
+    let potions = nextHero.potions;
+    while (progress >= 3) {
+      if (potions < nextHero.potionsMax) {
+        potions += 1;
+        progress -= 3;
+        events.push({ type: "POTION_GAINED", potions, potionsMax: nextHero.potionsMax });
+      } else {
+        progress = 2;
+        break;
+      }
+    }
+    nextHero = { ...nextHero, brambleProgress: progress, potions };
+  }
+
   switch (tile.rune) {
     case "tide": {
       const gain = Math.min(1, nextHero.focusMax - nextHero.focus);

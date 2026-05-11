@@ -7,6 +7,7 @@ export function HUD() {
   const [, bump] = useState(0);
   const state = useRunStore((s) => s.state);
   const reset = useRunStore((s) => s.reset);
+  const usePotion = useRunStore((s) => s.usePotion);
   const events = useRunStore((s) => s.lastEvents);
   const lastEvent = events[events.length - 1];
 
@@ -170,9 +171,28 @@ export function HUD() {
             </div>
           </div>
         </div>
-        <div style={{ fontSize: 16, letterSpacing: "0.06em" }}>
-          {t("hud.scoreLabel")}&nbsp;{meta.score}
-        </div>
+        <button
+          onClick={usePotion}
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: 8,
+            background: "transparent",
+            color: "#e9e7d8",
+            border: "1px solid #2a2a3e",
+            borderRadius: 10,
+            padding: "6px 10px",
+            cursor: hero.potions > 0 && hero.hp < hero.hpMax ? "pointer" : "not-allowed",
+            opacity: hero.potions > 0 ? 0.95 : 0.45,
+            fontFamily: "inherit",
+          }}
+          title={`🧪 ${hero.potions}/${hero.potionsMax}`}
+        >
+          <span style={{ fontSize: 18, letterSpacing: 0 }}>🧪</span>
+          <span style={{ fontSize: 16, letterSpacing: "0.06em" }}>
+            {hero.potions}/{hero.potionsMax}
+          </span>
+        </button>
       </div>
 
       {outcome === "win" && <Overlay title={t("overlay.win")} tone="win" />}
@@ -310,6 +330,10 @@ function formatEvent(e: NonNullable<ReturnType<typeof useRunStore.getState>["las
       return t("event.enemyKilled");
     case "HERO_LEVELED_UP":
       return t("event.heroLeveledUp", { level: e.level, hpMax: e.hpMax });
+    case "POTION_GAINED":
+      return t("event.potionGained", { potions: e.potions, max: e.potionsMax });
+    case "POTION_USED":
+      return t("event.potionUsed", { healed: e.healed, potions: e.potions, max: e.potionsMax });
     case "HERO_DAMAGED":
       return t("event.heroDamaged", { amount: e.amount });
     case "HERO_DIED":

@@ -42,6 +42,8 @@ export function applyInput(state: RunState, input: PlayerInput): TurnResult {
   switch (input.type) {
     case "MOVE":
       return applyMove(state, input.from, input.to);
+    case "USE_POTION":
+      return applyUsePotion(state);
     case "ABILITY":
       return reject(state, "ability_unimplemented", undefined, "ABILITY not implemented yet");
     case "END_FLOOR":
@@ -197,6 +199,63 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
     inputLog: [...nextState.inputLog, { type: "MOVE", from, to }],
   };
 
+  return { state: nextState, events };
+}
+
+function applyUsePotion(state: RunState): TurnResult {
+  const { hero } = state;
+  if (hero.potions <= 0) return reject(state, "no_potions", undefined, "No potions");
+  if (hero.hp >= hero.hpMax) return reject(state, "hp_full", undefined, "HP is already full");
+
+  const events: GameEvent[] = [{ type: "TURN_STARTED", turn: state.turn + 1 }];
+
+  const healAmount = 5;
+  const healed = Math.min(healAmount, hero.hpMax - hero.hp);
+  let nextState: RunState = {
+    ...state,
+    hero: { ...hero, hp: hero.hp + healed, potions: hero.potions - 1 },
+  };
+
+  events.push({ type: "HP_HEALED", amount: healed });
+  events.push({
+    type: "POTION_USED",
+    healed,
+    potions: nextState.hero.potions,
+    potionsMax: nextState.hero.potionsMax,
+  });
+
+  nextState = {
+    ...nextState,
+    turn: state.turn + 1,
+    currentFloor: { ...nextState.currentFloor, turn: nextState.currentFloor.turn + 1 },
+  };
+
+  const enemyTurn = runEnemyTurn(nextState);
+  nextState = enemyTurn.state;
+  for (const e of enemyTurn.events) events.push(e);
+
+  if (nextState.outcome === "death") {
+    nextState = { ...nextState, inputLog: [...nextState.inputLog, { type: "USE_POTION" }] };
+    return { state: nextState, events };
+  }
+
+  const prevLat = state.currentFloor.lattices;
+  const postLat = recomputeLattices(nextState.currentFloor.grid, prevLat);
+  for (const id of newlyDecharged(prevLat, postLat)) {
+    events.push({ type: "LATTICE_DECHARGED", lattice: id });
+  }
+  nextState = { ...nextState, currentFloor: { ...nextState.currentFloor, lattices: postLat } };
+
+  if (nextState.currentFloor.index === 0 && !nextState.currentFloor.exitUnlocked && hasAnyChargedLattice(postLat)) {
+    events.push({ type: "EXIT_UNLOCKED" });
+    nextState = { ...nextState, currentFloor: { ...nextState.currentFloor, exitUnlocked: true } };
+  }
+
+  const spawnResult = spawnEndOfTurnRune(nextState);
+  nextState = spawnResult.state;
+  for (const e of spawnResult.events) events.push(e);
+
+  nextState = { ...nextState, inputLog: [...nextState.inputLog, { type: "USE_POTION" }] };
   return { state: nextState, events };
 }
 
