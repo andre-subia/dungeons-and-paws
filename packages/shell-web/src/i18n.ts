@@ -19,7 +19,9 @@ const DICTS: Record<Locale, Dict> = {
     "settings.close": "Close",
     "settings.language": "Language",
     "settings.animSpeed": "Animation speed",
+    "settings.swipeSensitivity": "Swipe sensitivity",
     "settings.haptics": "Haptics",
+    "settings.reset": "Reset defaults",
     "help.section.lattices.hint": "(tap to expand)",
     "help.section.goal.title": "GOAL",
     "help.section.goal.body":
@@ -205,7 +207,9 @@ const DICTS: Record<Locale, Dict> = {
     "settings.close": "Cerrar",
     "settings.language": "Idioma",
     "settings.animSpeed": "Velocidad de animación",
+    "settings.swipeSensitivity": "Sensibilidad del swipe",
     "settings.haptics": "Haptic",
+    "settings.reset": "Restablecer",
     "help.section.lattices.hint": "(toca para ver)",
     "help.section.goal.title": "OBJETIVO",
     "help.section.goal.body":
@@ -391,7 +395,9 @@ const DICTS: Record<Locale, Dict> = {
     "settings.close": "Fechar",
     "settings.language": "Idioma",
     "settings.animSpeed": "Velocidade da animação",
+    "settings.swipeSensitivity": "Sensibilidade do swipe",
     "settings.haptics": "Haptic",
+    "settings.reset": "Restaurar padrão",
     "help.section.lattices.hint": "(toque para abrir)",
     "help.section.goal.title": "OBJETIVO",
     "help.section.goal.body":

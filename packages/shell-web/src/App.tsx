@@ -20,15 +20,19 @@ const HELP_SECTIONS = [
 
 const ANIM_SPEED_STORAGE_KEY = "gridlore:animSpeed";
 const HAPTICS_STORAGE_KEY = "gridlore:hapticsEnabled";
+const SWIPE_SENSITIVITY_STORAGE_KEY = "gridlore:swipeSensitivity";
+const DEFAULT_ANIM_SPEED = 0.7;
+const DEFAULT_HAPTICS_ENABLED = true;
+const DEFAULT_SWIPE_SENSITIVITY = 1.25;
 
 function readAnimSpeed(): number {
   try {
     const raw = localStorage.getItem(ANIM_SPEED_STORAGE_KEY);
     const n = raw == null ? NaN : Number(raw);
-    if (!Number.isFinite(n)) return 0.7;
+    if (!Number.isFinite(n)) return DEFAULT_ANIM_SPEED;
     return Math.max(0.2, Math.min(2, n));
   } catch {
-    return 0.7;
+    return DEFAULT_ANIM_SPEED;
   }
 }
 
@@ -44,12 +48,28 @@ function readBool(key: string, fallback: boolean): boolean {
   }
 }
 
+function readSwipeSensitivity(): number {
+  try {
+    const raw = localStorage.getItem(SWIPE_SENSITIVITY_STORAGE_KEY);
+    const n = raw == null ? NaN : Number(raw);
+    if (!Number.isFinite(n)) return DEFAULT_SWIPE_SENSITIVITY;
+    return Math.max(0.5, Math.min(2, n));
+  } catch {
+    return DEFAULT_SWIPE_SENSITIVITY;
+  }
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
 export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
-  const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, true));
+  const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, DEFAULT_HAPTICS_ENABLED));
+  const [swipeSensitivity, setSwipeSensitivity] = useState(readSwipeSensitivity);
   const { trigger } = useWebHaptics();
   const score = useRunStore((s) => s.state.meta.score);
   const floorIndex = useRunStore((s) => s.state.currentFloor.index);
@@ -215,7 +235,7 @@ export function App() {
   }, [attemptMove]);
 
   useEffect(() => {
-    const MIN_SWIPE_PX = 24;
+    const thresholdPx = clamp(Math.round(28 / swipeSensitivity), 10, 60);
     let active:
       | {
           id: number;
@@ -234,52 +254,38 @@ export function App() {
     }
 
     function directionFromDelta(dx: number, dy: number): { dx: -1 | 0 | 1; dy: -1 | 0 | 1 } | null {
-      if (dx === 0 && dy === 0) return null;
-      const angle = Math.atan2(dy, dx);
-      const octant = Math.round(angle / (Math.PI / 4));
-      const idx = ((octant % 8) + 8) % 8;
-      const dirs = [
-        { dx: 1, dy: 0 },
-        { dx: 1, dy: 1 },
-        { dx: 0, dy: 1 },
-        { dx: -1, dy: 1 },
-        { dx: -1, dy: 0 },
-        { dx: -1, dy: -1 },
-        { dx: 0, dy: -1 },
-        { dx: 1, dy: -1 },
-      ] as const;
-      return dirs[idx] ?? null;
+      const adx = Math.abs(dx);
+      const ady = Math.abs(dy);
+      if (adx < thresholdPx && ady < thresholdPx) return null;
+
+      const diagGate = thresholdPx * 0.6;
+      const sx = dx > 0 ? 1 : dx < 0 ? -1 : 0;
+      const sy = dy > 0 ? 1 : dy < 0 ? -1 : 0;
+      if (adx >= diagGate && ady >= diagGate) return { dx: sx as -1 | 0 | 1, dy: sy as -1 | 0 | 1 };
+
+      if (adx >= ady) return { dx: sx as -1 | 0 | 1, dy: 0 };
+      return { dx: 0, dy: sy as -1 | 0 | 1 };
     }
 
     function handleEnd(dx: number, dy: number, prevent: () => void) {
-      const moved = Math.hypot(dx, dy) >= MIN_SWIPE_PX;
-      console.log("[swipe] end", { dx, dy, moved });
-      if (!moved) return;
-
       const dir = directionFromDelta(dx, dy);
-      console.log("[swipe] dir", dir);
       if (!dir || (dir.dx === 0 && dir.dy === 0)) return;
 
       const store = useRunStore.getState();
       const state = store.state;
       if (state.outcome !== "in_progress") return;
       const to = { x: state.hero.position.x + dir.dx, y: state.hero.position.y + dir.dy };
-      console.log("[swipe] to", to);
       if (!state.currentFloor.grid.inBounds(to)) return;
       prevent();
       const accepted = store.move(to);
-      console.log("[swipe] move accepted", accepted);
       if (!accepted) return;
-      console.log("[swipe] hapticsEnabled", hapticsEnabled);
       if (!hapticsEnabled) return;
 
       const events = useRunStore.getState().lastEvents;
       const charged = events.some((ev) => ev.type === "LATTICE_CHARGED");
       const attack = events.some((ev) => ev.type === "DAMAGE_DEALT");
-      console.log("[swipe] events", { charged, attack, types: events.map((ev) => ev.type) });
 
       if (charged) {
-        console.log("[swipe] trigger lattice");
         trigger([
           { duration: 45, intensity: 0.7 },
           { delay: 70, duration: 55, intensity: 1 },
@@ -287,12 +293,10 @@ export function App() {
         return;
       }
       if (attack) {
-        console.log("[swipe] trigger attack");
         trigger([{ duration: 35, intensity: 1 }]);
         return;
       }
 
-      console.log("[swipe] trigger swipe");
       trigger([
         { duration: 80, intensity: 0.8 },
         { delay: 80, duration: 50, intensity: 0.3 },
@@ -304,7 +308,6 @@ export function App() {
       if (!e.isPrimary) return;
       if (active) return;
       if (isSwipeExemptTarget(e.target)) return;
-      console.log("[swipe] down", { pointerId: e.pointerId, x: e.clientX, y: e.clientY, target: (e.target as Element | null)?.tagName });
       active = {
         id: e.pointerId,
         startX: e.clientX,
@@ -322,7 +325,7 @@ export function App() {
       active.lastY = e.clientY;
       const dx = active.lastX - active.startX;
       const dy = active.lastY - active.startY;
-      if (!active.moved && Math.hypot(dx, dy) >= MIN_SWIPE_PX) active.moved = true;
+      if (!active.moved && Math.hypot(dx, dy) >= thresholdPx) active.moved = true;
       if (active.moved) e.preventDefault();
     }
 
@@ -346,7 +349,6 @@ export function App() {
       if (isSwipeExemptTarget(e.target)) return;
       const t = e.changedTouches[0];
       if (!t) return;
-      console.log("[swipe] touchstart", { id: t.identifier, x: t.clientX, y: t.clientY, target: (e.target as Element | null)?.tagName });
       active = {
         id: t.identifier,
         startX: t.clientX,
@@ -366,7 +368,7 @@ export function App() {
       active.lastY = t.clientY;
       const dx = active.lastX - active.startX;
       const dy = active.lastY - active.startY;
-      if (!active.moved && Math.hypot(dx, dy) >= MIN_SWIPE_PX) active.moved = true;
+      if (!active.moved && Math.hypot(dx, dy) >= thresholdPx) active.moved = true;
       if (active.moved) e.preventDefault();
     }
 
@@ -405,7 +407,7 @@ export function App() {
       window.removeEventListener("touchend", onTouchEnd, true);
       window.removeEventListener("touchcancel", onTouchCancel, true);
     };
-  }, [hapticsEnabled, trigger, attemptMove]);
+  }, [hapticsEnabled, trigger, attemptMove, swipeSensitivity]);
 
   function updateAnimSpeed(v: number) {
     const clamped = Math.max(0.2, Math.min(2, v));
@@ -415,11 +417,26 @@ export function App() {
     } catch {}
   }
 
+  function updateSwipeSensitivity(v: number) {
+    const clamped = Math.max(0.5, Math.min(2, v));
+    setSwipeSensitivity(clamped);
+    try {
+      localStorage.setItem(SWIPE_SENSITIVITY_STORAGE_KEY, String(clamped));
+    } catch {}
+  }
+
   function updateHapticsEnabled(v: boolean) {
     setHapticsEnabled(v);
     try {
       localStorage.setItem(HAPTICS_STORAGE_KEY, v ? "1" : "0");
     } catch {}
+  }
+
+  function resetSettings() {
+    setLocale("en");
+    updateAnimSpeed(DEFAULT_ANIM_SPEED);
+    updateSwipeSensitivity(DEFAULT_SWIPE_SENSITIVITY);
+    updateHapticsEnabled(DEFAULT_HAPTICS_ENABLED);
   }
 
   function localeFlag(locale: ReturnType<typeof getLocale>): string {
@@ -723,6 +740,22 @@ export function App() {
                 />
               </div>
 
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+                  <div style={{ opacity: 0.85 }}>{t("settings.swipeSensitivity")}</div>
+                  <div style={{ opacity: 0.7, letterSpacing: 0 }}>{swipeSensitivity.toFixed(2)}</div>
+                </div>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2}
+                  step={0.05}
+                  value={swipeSensitivity}
+                  onChange={(e) => updateSwipeSensitivity(Number(e.target.value))}
+                  style={{ width: "100%" }}
+                />
+              </div>
+
               <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
                 <input
                   type="checkbox"
@@ -731,6 +764,24 @@ export function App() {
                 />
                 <span style={{ opacity: 0.85 }}>{t("settings.haptics")}</span>
               </label>
+
+              <button
+                onClick={resetSettings}
+                style={{
+                  marginTop: 6,
+                  background: "transparent",
+                  color: "#e9e7d8",
+                  border: "1px solid #2a2a3e",
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  opacity: 0.9,
+                }}
+              >
+                {t("settings.reset")}
+              </button>
             </div>
           </div>
         </div>
