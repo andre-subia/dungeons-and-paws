@@ -3,12 +3,14 @@ import { RUNES, xpToNextLevel, type LatticeKind } from "@gridlore/engine";
 import { useRunStore } from "../state/store.js";
 import { subscribeLocaleChange, t, tRune } from "../i18n.js";
 import { RUNE_EMOJI } from "../pixi/palette.js";
+import { useWebHaptics } from "web-haptics/react";
 
 export function HUD() {
   const [, bump] = useState(0);
   const state = useRunStore((s) => s.state);
   const reset = useRunStore((s) => s.reset);
   const usePotion = useRunStore((s) => s.usePotion);
+  const { trigger } = useWebHaptics();
   const events = useRunStore((s) => s.lastEvents);
   const lastEvent = pickPrimaryEvent(events);
   const [invOpen, setInvOpen] = useState(false);
@@ -74,6 +76,28 @@ export function HUD() {
     openInventory();
   }
 
+  function hapticsOn(): boolean {
+    try {
+      const raw = localStorage.getItem("gridlore:hapticsEnabled");
+      if (raw == null) return true;
+      if (raw === "1" || raw === "true") return true;
+      if (raw === "0" || raw === "false") return false;
+      return true;
+    } catch {
+      return true;
+    }
+  }
+
+  function onUsePotion() {
+    const ok = usePotion();
+    if (ok && hapticsOn()) {
+      trigger([
+        { duration: 30 },
+        { delay: 60, duration: 40, intensity: 1 },
+      ]);
+    }
+  }
+
   return (
     <div
       style={{
@@ -104,9 +128,6 @@ export function HUD() {
         <span>♥&nbsp;{hero.hp}/{hero.hpMax}</span>
         <span>◆&nbsp;{hero.focus}/{hero.focusMax}</span>
         <span>🛡&nbsp;{hero.armor}</span>
-        <span>
-          {t("hud.floorAbbr")}&nbsp;{currentFloor.index + 1}
-        </span>
         <span>
           {t("hud.turnAbbr")}&nbsp;{turn}
         </span>
@@ -248,7 +269,7 @@ export function HUD() {
           hero={hero}
           gold={meta.gold}
           onClose={closeInventory}
-          onUsePotion={() => usePotion()}
+          onUsePotion={onUsePotion}
         />
       )}
     </div>

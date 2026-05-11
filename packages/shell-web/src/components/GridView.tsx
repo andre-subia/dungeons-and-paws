@@ -2,13 +2,14 @@ import { useEffect, useRef } from "react";
 import { GridRenderer } from "../pixi/GridRenderer.js";
 import { useRunStore } from "../state/store.js";
 import { subscribeLocaleChange } from "../i18n.js";
+import type { Cell } from "@gridlore/engine";
 
 /**
  * Mounts the Pixi grid renderer inside a host div, observes the host
  * for size changes (so flex-layout shifts resize the canvas), and
  * dispatches moves via the store when the renderer reports a tap.
  */
-export function GridView({ animSpeed }: { animSpeed: number }) {
+export function GridView({ animSpeed, onMove }: { animSpeed: number; onMove: (cell: Cell) => void }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<GridRenderer | null>(null);
 
@@ -28,9 +29,7 @@ export function GridView({ animSpeed }: { animSpeed: number }) {
       renderer = r;
       rendererRef.current = r;
       r.setAnimSpeed(animSpeed);
-      r.setMoveHandler((cell) => {
-        useRunStore.getState().move(cell);
-      });
+      r.setMoveHandler(onMove);
       const snap = useRunStore.getState();
       r.render(snap.state, snap.lastEvents);
       r.resize();
@@ -62,6 +61,10 @@ export function GridView({ animSpeed }: { animSpeed: number }) {
   useEffect(() => {
     rendererRef.current?.setAnimSpeed(animSpeed);
   }, [animSpeed]);
+
+  useEffect(() => {
+    rendererRef.current?.setMoveHandler(onMove);
+  }, [onMove]);
 
   return (
     <div

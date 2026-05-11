@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GridView } from "./components/GridView.js";
 import { HUD } from "./components/HUD.js";
 import { LOCALES, getLocale, setLocale, subscribeLocaleChange, t } from "./i18n.js";
 import { useRunStore } from "./state/store.js";
+import { useWebHaptics } from "web-haptics/react";
+import type { Cell } from "@gridlore/engine";
 
 /** Order of sections rendered in the help modal. Keys mirror i18n. */
 const HELP_SECTIONS = [
@@ -48,9 +50,41 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
   const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, true));
+  const { trigger } = useWebHaptics();
   const score = useRunStore((s) => s.state.meta.score);
   const floorIndex = useRunStore((s) => s.state.currentFloor.index);
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
+
+  const attemptMove = useCallback(
+    (to: Cell, source: "tap" | "keyboard") => {
+      const store = useRunStore.getState();
+      const accepted = store.move(to);
+      if (!accepted) return;
+      if (!hapticsEnabled) return;
+
+      const events = useRunStore.getState().lastEvents;
+      const charged = events.some((e) => e.type === "LATTICE_CHARGED");
+      if (charged) {
+        trigger([
+          { duration: 45, intensity: 0.7 },
+          { delay: 70, duration: 55, intensity: 1 },
+        ]);
+        return;
+      }
+
+      const attack = events.some((e) => e.type === "DAMAGE_DEALT");
+      if (attack) {
+        trigger([{ duration: 35, intensity: 1 }]);
+        return;
+      }
+
+      if (source === "tap") trigger();
+    },
+    [hapticsEnabled, trigger],
+  );
+
+  const onGridMove = useCallback((cell: Cell) => attemptMove(cell, "tap"), [attemptMove]);
+
   useEffect(() => {
     const pressed = new Set<"up" | "down" | "left" | "right">();
     const latched = new Set<"up" | "down" | "left" | "right">();
@@ -108,7 +142,7 @@ export function App() {
       if (state.outcome !== "in_progress") return;
       const to = { x: state.hero.position.x + dx, y: state.hero.position.y + dy };
       if (!state.currentFloor.grid.inBounds(to)) return;
-      store.move(to);
+      attemptMove(to, "keyboard");
     }
 
     function onKeyDown(e: KeyboardEvent) {
@@ -121,7 +155,13 @@ export function App() {
       }
       if (e.key === "2") {
         e.preventDefault();
-        useRunStore.getState().usePotion();
+        const ok = useRunStore.getState().usePotion();
+        if (ok && hapticsEnabled) {
+          trigger([
+            { duration: 30 },
+            { delay: 60, duration: 40, intensity: 1 },
+          ]);
+        }
         return;
       }
 
@@ -172,18 +212,19 @@ export function App() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, []);
+  }, [attemptMove]);
 
   useEffect(() => {
     const MIN_SWIPE_PX = 24;
     let active:
       | {
-          pointerId: number;
+          id: number;
           startX: number;
           startY: number;
           lastX: number;
           lastY: number;
           moved: boolean;
+          kind: "pointer" | "touch";
         }
       | null = null;
 
@@ -210,23 +251,73 @@ export function App() {
       return dirs[idx] ?? null;
     }
 
+    function handleEnd(dx: number, dy: number, prevent: () => void) {
+      const moved = Math.hypot(dx, dy) >= MIN_SWIPE_PX;
+      console.log("[swipe] end", { dx, dy, moved });
+      if (!moved) return;
+
+      const dir = directionFromDelta(dx, dy);
+      console.log("[swipe] dir", dir);
+      if (!dir || (dir.dx === 0 && dir.dy === 0)) return;
+
+      const store = useRunStore.getState();
+      const state = store.state;
+      if (state.outcome !== "in_progress") return;
+      const to = { x: state.hero.position.x + dir.dx, y: state.hero.position.y + dir.dy };
+      console.log("[swipe] to", to);
+      if (!state.currentFloor.grid.inBounds(to)) return;
+      prevent();
+      const accepted = store.move(to);
+      console.log("[swipe] move accepted", accepted);
+      if (!accepted) return;
+      console.log("[swipe] hapticsEnabled", hapticsEnabled);
+      if (!hapticsEnabled) return;
+
+      const events = useRunStore.getState().lastEvents;
+      const charged = events.some((ev) => ev.type === "LATTICE_CHARGED");
+      const attack = events.some((ev) => ev.type === "DAMAGE_DEALT");
+      console.log("[swipe] events", { charged, attack, types: events.map((ev) => ev.type) });
+
+      if (charged) {
+        console.log("[swipe] trigger lattice");
+        trigger([
+          { duration: 45, intensity: 0.7 },
+          { delay: 70, duration: 55, intensity: 1 },
+        ]);
+        return;
+      }
+      if (attack) {
+        console.log("[swipe] trigger attack");
+        trigger([{ duration: 35, intensity: 1 }]);
+        return;
+      }
+
+      console.log("[swipe] trigger swipe");
+      trigger([
+        { duration: 80, intensity: 0.8 },
+        { delay: 80, duration: 50, intensity: 0.3 },
+      ]);
+    }
+
     function onPointerDown(e: PointerEvent) {
       if (e.pointerType === "mouse") return;
       if (!e.isPrimary) return;
       if (active) return;
       if (isSwipeExemptTarget(e.target)) return;
+      console.log("[swipe] down", { pointerId: e.pointerId, x: e.clientX, y: e.clientY, target: (e.target as Element | null)?.tagName });
       active = {
-        pointerId: e.pointerId,
+        id: e.pointerId,
         startX: e.clientX,
         startY: e.clientY,
         lastX: e.clientX,
         lastY: e.clientY,
         moved: false,
+        kind: "pointer",
       };
     }
 
     function onPointerMove(e: PointerEvent) {
-      if (!active || e.pointerId !== active.pointerId) return;
+      if (!active || active.kind !== "pointer" || e.pointerId !== active.id) return;
       active.lastX = e.clientX;
       active.lastY = e.clientY;
       const dx = active.lastX - active.startX;
@@ -236,41 +327,85 @@ export function App() {
     }
 
     function endGesture(e: PointerEvent) {
-      if (!active || e.pointerId !== active.pointerId) return;
+      if (!active || active.kind !== "pointer" || e.pointerId !== active.id) return;
       const dx = active.lastX - active.startX;
       const dy = active.lastY - active.startY;
-      const moved = active.moved && Math.hypot(dx, dy) >= MIN_SWIPE_PX;
+      const moved = active.moved;
       active = null;
-
       if (!moved) return;
-      const dir = directionFromDelta(dx, dy);
-      if (!dir || (dir.dx === 0 && dir.dy === 0)) return;
-
-      const store = useRunStore.getState();
-      const state = store.state;
-      if (state.outcome !== "in_progress") return;
-      const to = { x: state.hero.position.x + dir.dx, y: state.hero.position.y + dir.dy };
-      if (!state.currentFloor.grid.inBounds(to)) return;
-      e.preventDefault();
-      store.move(to);
+      handleEnd(dx, dy, () => e.preventDefault());
     }
 
     function onPointerCancel(e: PointerEvent) {
-      if (!active || e.pointerId !== active.pointerId) return;
+      if (!active || active.kind !== "pointer" || e.pointerId !== active.id) return;
       active = null;
     }
 
-    window.addEventListener("pointerdown", onPointerDown, { passive: true });
-    window.addEventListener("pointermove", onPointerMove, { passive: false });
-    window.addEventListener("pointerup", endGesture, { passive: false });
-    window.addEventListener("pointercancel", onPointerCancel);
+    function onTouchStart(e: TouchEvent) {
+      if (active) return;
+      if (isSwipeExemptTarget(e.target)) return;
+      const t = e.changedTouches[0];
+      if (!t) return;
+      console.log("[swipe] touchstart", { id: t.identifier, x: t.clientX, y: t.clientY, target: (e.target as Element | null)?.tagName });
+      active = {
+        id: t.identifier,
+        startX: t.clientX,
+        startY: t.clientY,
+        lastX: t.clientX,
+        lastY: t.clientY,
+        moved: false,
+        kind: "touch",
+      };
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      if (!active || active.kind !== "touch") return;
+      const t = Array.from(e.changedTouches).find((x) => x.identifier === active!.id);
+      if (!t) return;
+      active.lastX = t.clientX;
+      active.lastY = t.clientY;
+      const dx = active.lastX - active.startX;
+      const dy = active.lastY - active.startY;
+      if (!active.moved && Math.hypot(dx, dy) >= MIN_SWIPE_PX) active.moved = true;
+      if (active.moved) e.preventDefault();
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (!active || active.kind !== "touch") return;
+      const t = Array.from(e.changedTouches).find((x) => x.identifier === active!.id);
+      if (!t) return;
+      const dx = active.lastX - active.startX;
+      const dy = active.lastY - active.startY;
+      const moved = active.moved;
+      active = null;
+      if (!moved) return;
+      handleEnd(dx, dy, () => e.preventDefault());
+    }
+
+    function onTouchCancel() {
+      if (!active || active.kind !== "touch") return;
+      active = null;
+    }
+
+    window.addEventListener("pointerdown", onPointerDown, { passive: true, capture: true });
+    window.addEventListener("pointermove", onPointerMove, { passive: false, capture: true });
+    window.addEventListener("pointerup", endGesture, { passive: false, capture: true });
+    window.addEventListener("pointercancel", onPointerCancel, { capture: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: true, capture: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false, capture: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: false, capture: true });
+    window.addEventListener("touchcancel", onTouchCancel, { capture: true });
     return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", endGesture);
-      window.removeEventListener("pointercancel", onPointerCancel);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointermove", onPointerMove, true);
+      window.removeEventListener("pointerup", endGesture, true);
+      window.removeEventListener("pointercancel", onPointerCancel, true);
+      window.removeEventListener("touchstart", onTouchStart, true);
+      window.removeEventListener("touchmove", onTouchMove, true);
+      window.removeEventListener("touchend", onTouchEnd, true);
+      window.removeEventListener("touchcancel", onTouchCancel, true);
     };
-  }, []);
+  }, [hapticsEnabled, trigger, attemptMove]);
 
   function updateAnimSpeed(v: number) {
     const clamped = Math.max(0.2, Math.min(2, v));
@@ -378,7 +513,7 @@ export function App() {
           📜
         </button>
       </header>
-      <GridView animSpeed={animSpeed} />
+      <GridView animSpeed={animSpeed} onMove={onGridMove} />
       <HUD />
 
       {helpOpen && (
