@@ -11,6 +11,7 @@ export function HUD() {
   const usePotion = useRunStore((s) => s.usePotion);
   const events = useRunStore((s) => s.lastEvents);
   const lastEvent = pickPrimaryEvent(events);
+  const [invOpen, setInvOpen] = useState(false);
 
   const { hero, currentFloor, meta, turn, outcome } = state;
   const lattices = currentFloor.lattices;
@@ -26,7 +27,7 @@ export function HUD() {
         display: "flex",
         flexDirection: "column",
         gap: 4,
-        padding: "6px 10px 8px",
+        padding: "6px 10px 4px",
         fontFamily: "ui-monospace, monospace",
         fontSize: 12,
         flexShrink: 0,
@@ -50,7 +51,6 @@ export function HUD() {
         <span>♥&nbsp;{hero.hp}/{hero.hpMax}</span>
         <span>◆&nbsp;{hero.focus}/{hero.focusMax}</span>
         <span>🛡&nbsp;{hero.armor}</span>
-        <span>🪙&nbsp;{meta.gold}</span>
         <span>
           {t("hud.floorAbbr")}&nbsp;{currentFloor.index + 1}
         </span>
@@ -112,18 +112,15 @@ export function HUD() {
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "baseline",
+          alignItems: "center",
           marginTop: 4,
-          padding: "6px 10px 2px",
+          padding: "10px 10px 0px",
           borderTop: "1px solid #2a2a3e",
           fontFamily: "ui-monospace, monospace",
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 170 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-            <div style={{ fontSize: 16, letterSpacing: "0.06em" }}>
-              {t("hud.floorLabel")}&nbsp;{currentFloor.index + 1}
-            </div>
             <div style={{ fontSize: 16, letterSpacing: "0.06em" }}>
               {t("hud.levelLabel")}&nbsp;{hero.level}
             </div>
@@ -156,7 +153,7 @@ export function HUD() {
           </div>
         </div>
         <button
-          onClick={usePotion}
+          onClick={() => setInvOpen(true)}
           style={{
             display: "flex",
             alignItems: "baseline",
@@ -166,16 +163,14 @@ export function HUD() {
             border: "1px solid #2a2a3e",
             borderRadius: 10,
             padding: "6px 10px",
-            cursor: hero.potions > 0 && hero.hp < hero.hpMax ? "pointer" : "not-allowed",
-            opacity: hero.potions > 0 ? 0.95 : 0.45,
+            cursor: "pointer",
+            opacity: 0.95,
             fontFamily: "inherit",
           }}
-          title={`🧪 ${hero.potions}/${hero.potionsMax}`}
+          title={t("inventory.open")}
         >
-          <span style={{ fontSize: 18, letterSpacing: 0 }}>🧪</span>
-          <span style={{ fontSize: 16, letterSpacing: "0.06em" }}>
-            {hero.potions}/{hero.potionsMax}
-          </span>
+          <span style={{ fontSize: 18, letterSpacing: 0 }}>🎒</span>
+          <span style={{ fontSize: 16, letterSpacing: "0.06em" }}>{t("inventory.title")}</span>
         </button>
       </div>
 
@@ -188,6 +183,140 @@ export function HUD() {
           onAction={() => reset(`GRD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`)}
         />
       )}
+
+      {invOpen && (
+        <InventorySheet
+          hero={hero}
+          gold={meta.gold}
+          onClose={() => setInvOpen(false)}
+          onUsePotion={() => usePotion()}
+        />
+      )}
+    </div>
+  );
+}
+
+function InventorySheet({
+  hero,
+  gold,
+  onClose,
+  onUsePotion,
+}: {
+  hero: ReturnType<typeof useRunStore.getState>["state"]["hero"];
+  gold: number;
+  onClose: () => void;
+  onUsePotion: () => void;
+}) {
+  const canUsePotion = hero.potions > 0 && hero.hp < hero.hpMax;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(11, 11, 20, 0.55)",
+        display: "grid",
+        alignItems: "end",
+        pointerEvents: "auto",
+        zIndex: 6,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#11111c",
+          borderTop: "1px solid #2a2a3e",
+          borderRadius: "14px 14px 0 0",
+          padding: "10px 12px 14px",
+          maxHeight: "70vh",
+          overflowY: "auto",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 10,
+            marginBottom: 10,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: 18 }}>🎒</span>
+            <span style={{ fontSize: 14, letterSpacing: "0.06em" }}>{t("inventory.title")}</span>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "transparent",
+              color: "#e9e7d8",
+              border: "1px solid #2a2a3e",
+              borderRadius: 10,
+              padding: "6px 10px",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              opacity: 0.9,
+            }}
+          >
+            {t("inventory.close")}
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 10,
+          }}
+        >
+          <ItemCard icon="🌿" title={t("inventory.leaf")} value={`${hero.brambleProgress}/3`} />
+          <button
+            onClick={onUsePotion}
+            disabled={!canUsePotion}
+            style={{
+              display: "grid",
+              gap: 6,
+              placeItems: "center",
+              background: "transparent",
+              color: "#e9e7d8",
+              border: "1px solid #2a2a3e",
+              borderRadius: 12,
+              padding: "10px 8px",
+              cursor: canUsePotion ? "pointer" : "not-allowed",
+              opacity: hero.potions > 0 ? 0.95 : 0.45,
+              fontFamily: "inherit",
+            }}
+            title={t("inventory.potionHint", { potions: hero.potions, max: hero.potionsMax })}
+          >
+            <div style={{ fontSize: 22, lineHeight: "22px" }}>🧪</div>
+            <div style={{ fontSize: 11, opacity: 0.85, letterSpacing: "0.04em" }}>{t("inventory.potion")}</div>
+            <div style={{ fontSize: 12, letterSpacing: "0.06em" }}>{hero.potions}</div>
+          </button>
+          <ItemCard icon="🪙" title={t("inventory.coins")} value={`${gold}`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ItemCard({ icon, title, value }: { icon: string; title: string; value: string }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 6,
+        placeItems: "center",
+        border: "1px solid #2a2a3e",
+        borderRadius: 12,
+        padding: "10px 8px",
+        background: "rgba(26, 26, 42, 0.2)",
+      }}
+    >
+      <div style={{ fontSize: 22, lineHeight: "22px" }}>{icon}</div>
+      <div style={{ fontSize: 11, opacity: 0.85, letterSpacing: "0.04em", textAlign: "center" }}>{title}</div>
+      <div style={{ fontSize: 12, letterSpacing: "0.06em" }}>{value}</div>
     </div>
   );
 }

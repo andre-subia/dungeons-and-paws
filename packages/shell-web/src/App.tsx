@@ -20,6 +20,7 @@ export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const score = useRunStore((s) => s.state.meta.score);
+  const floorIndex = useRunStore((s) => s.state.currentFloor.index);
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
 
   function cycleLocale() {
@@ -94,6 +95,7 @@ export function App() {
             pointerEvents: "none",
           }}
         >
+          <span style={{ opacity: 0.75, letterSpacing: 0 }}>{`P${floorIndex + 1}`}</span>
           <span>{t("app.title")}</span>
           <span style={{ letterSpacing: 0 }}>{`🏆 ${score}`}</span>
         </div>

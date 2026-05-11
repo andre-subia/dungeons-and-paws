@@ -31,7 +31,8 @@ const DICTS: Record<Locale, Dict> = {
       "⚔ Attack — damage you deal in combat\n" +
       "🛡 Armor — absorbs damage before HP\n" +
       "↑ Level/XP — gain XP from runes and kills; leveling raises ♥ max HP\n" +
-      "🧪 Potions — heal 5 ♥ (gain 1 every 3 🌿 Bramble, max 2)\n" +
+      "🎒 Bag — open your items (🪙 coins, 🌿 leaves, 🧪 potions)\n" +
+      "🧪 Potions — heal 5 ♥ (gain 1 every 3 🌿 leaves, max 2)\n" +
       "◆ Focus — saved for future abilities\n" +
       "🪙 Gold — saved for future shops",
     "help.section.runes.title": "RUNES (consumed when stepped on)",
@@ -93,6 +94,13 @@ const DICTS: Record<Locale, Dict> = {
     "hud.xpLabel": "XP",
     "hud.floorAbbr": "F",
     "hud.turnAbbr": "T",
+    "inventory.title": "BAG",
+    "inventory.open": "Open bag",
+    "inventory.close": "Close",
+    "inventory.leaf": "Leaf",
+    "inventory.potion": "Potion",
+    "inventory.potionHint": "🧪 {potions}/{max}",
+    "inventory.coins": "Coins",
     "hud.rowsAbbr": "R",
     "hud.colsAbbr": "C",
     "hud.chambersAbbr": "CH",
@@ -190,7 +198,8 @@ const DICTS: Record<Locale, Dict> = {
       "⚔ Ataque — daño que infliges en combate\n" +
       "🛡 Armadura — absorbe daño antes que el HP\n" +
       "↑ Nivel/EXP — ganas EXP por runas y bajas; subir aumenta tu ♥ HP máximo\n" +
-      "🧪 Pociones — curan 5 ♥ (ganas 1 cada 3 🌿 Zarzas, máximo 2)\n" +
+      "🎒 Mochila — abre tus objetos (🪙 monedas, 🌿 hojas, 🧪 pociones)\n" +
+      "🧪 Pociones — curan 5 ♥ (ganas 1 cada 3 🌿 hojas, máximo 2)\n" +
       "◆ Foco — reservado para habilidades futuras\n" +
       "🪙 Oro — reservado para tiendas futuras",
     "help.section.runes.title": "RUNAS (se consumen al pisar)",
@@ -252,6 +261,13 @@ const DICTS: Record<Locale, Dict> = {
     "hud.xpLabel": "EXP",
     "hud.floorAbbr": "P",
     "hud.turnAbbr": "T",
+    "inventory.title": "MOCHILA",
+    "inventory.open": "Abrir mochila",
+    "inventory.close": "Cerrar",
+    "inventory.leaf": "Hoja",
+    "inventory.potion": "Poción",
+    "inventory.potionHint": "🧪 {potions}/{max}",
+    "inventory.coins": "Monedas",
     "hud.rowsAbbr": "F",
     "hud.colsAbbr": "C",
     "hud.chambersAbbr": "CÁM",
@@ -349,7 +365,8 @@ const DICTS: Record<Locale, Dict> = {
       "⚔ Ataque — dano que você causa em combate\n" +
       "🛡 Armadura — absorve dano antes do HP\n" +
       "↑ Nível/EXP — ganha EXP por runas e abates; subir aumenta o ♥ HP máximo\n" +
-      "🧪 Poções — curam 5 ♥ (ganha 1 a cada 3 🌿 Espinho, máximo 2)\n" +
+      "🎒 Mochila — abre seus itens (🪙 moedas, 🌿 folhas, 🧪 poções)\n" +
+      "🧪 Poções — curam 5 ♥ (ganha 1 a cada 3 🌿 folhas, máximo 2)\n" +
       "◆ Foco — reservado para habilidades futuras\n" +
       "🪙 Ouro — reservado para lojas futuras",
     "help.section.runes.title": "RUNAS (consumidas ao pisar)",
@@ -411,6 +428,13 @@ const DICTS: Record<Locale, Dict> = {
     "hud.xpLabel": "EXP",
     "hud.floorAbbr": "A",
     "hud.turnAbbr": "T",
+    "inventory.title": "MOCHILA",
+    "inventory.open": "Abrir mochila",
+    "inventory.close": "Fechar",
+    "inventory.leaf": "Folha",
+    "inventory.potion": "Poção",
+    "inventory.potionHint": "🧪 {potions}/{max}",
+    "inventory.coins": "Moedas",
     "hud.rowsAbbr": "L",
     "hud.colsAbbr": "C",
     "hud.chambersAbbr": "CAM",
