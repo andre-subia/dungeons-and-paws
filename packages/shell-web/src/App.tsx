@@ -22,6 +22,226 @@ export function App() {
   const score = useRunStore((s) => s.state.meta.score);
   const floorIndex = useRunStore((s) => s.state.currentFloor.index);
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
+  useEffect(() => {
+    const pressed = new Set<"up" | "down" | "left" | "right">();
+    const latched = new Set<"up" | "down" | "left" | "right">();
+    let pendingMoveTimer: number | null = null;
+    const CHORD_MS = 25;
+
+    function isEditableTarget(t: EventTarget | null): boolean {
+      if (!t || !(t instanceof HTMLElement)) return false;
+      const tag = t.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (t.isContentEditable) return true;
+      return false;
+    }
+
+    function keyToDir(key: string): "up" | "down" | "left" | "right" | null {
+      switch (key) {
+        case "ArrowUp":
+        case "w":
+        case "W":
+          return "up";
+        case "ArrowDown":
+        case "s":
+        case "S":
+          return "down";
+        case "ArrowLeft":
+        case "a":
+        case "A":
+          return "left";
+        case "ArrowRight":
+        case "d":
+        case "D":
+          return "right";
+        default:
+          return null;
+      }
+    }
+
+    function computeVector(dirs: ReadonlySet<"up" | "down" | "left" | "right">): { dx: number; dy: number } {
+      let dx = 0;
+      let dy = 0;
+      if (dirs.has("left")) dx -= 1;
+      if (dirs.has("right")) dx += 1;
+      if (dirs.has("up")) dy -= 1;
+      if (dirs.has("down")) dy += 1;
+      if (dx !== 0) dx = dx > 0 ? 1 : -1;
+      if (dy !== 0) dy = dy > 0 ? 1 : -1;
+      return { dx, dy };
+    }
+
+    function tryMoveFrom(dirs: ReadonlySet<"up" | "down" | "left" | "right">): void {
+      const { dx, dy } = computeVector(dirs);
+      if (dx === 0 && dy === 0) return;
+      const store = useRunStore.getState();
+      const state = store.state;
+      if (state.outcome !== "in_progress") return;
+      const to = { x: state.hero.position.x + dx, y: state.hero.position.y + dy };
+      if (!state.currentFloor.grid.inBounds(to)) return;
+      store.move(to);
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (isEditableTarget(e.target)) return;
+
+      if (e.key === "b" || e.key === "B") {
+        e.preventDefault();
+        window.dispatchEvent(new Event("ui:toggleInventory"));
+        return;
+      }
+      if (e.key === "2") {
+        e.preventDefault();
+        useRunStore.getState().usePotion();
+        return;
+      }
+
+      const dir = keyToDir(e.key);
+      if (!dir) return;
+      e.preventDefault();
+      if (e.repeat) return;
+      pressed.add(dir);
+      if (pendingMoveTimer == null) {
+        latched.clear();
+        latched.add(dir);
+        pendingMoveTimer = window.setTimeout(() => {
+          pendingMoveTimer = null;
+          tryMoveFrom(latched);
+          latched.clear();
+        }, CHORD_MS);
+        return;
+      }
+
+      latched.add(dir);
+      window.clearTimeout(pendingMoveTimer);
+      pendingMoveTimer = null;
+      tryMoveFrom(latched);
+      latched.clear();
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      const dir = keyToDir(e.key);
+      if (!dir) return;
+      e.preventDefault();
+      pressed.delete(dir);
+    }
+
+    function onBlur() {
+      pressed.clear();
+      latched.clear();
+      if (pendingMoveTimer != null) {
+        window.clearTimeout(pendingMoveTimer);
+        pendingMoveTimer = null;
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown, { passive: false });
+    window.addEventListener("keyup", onKeyUp, { passive: false });
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+
+  useEffect(() => {
+    const MIN_SWIPE_PX = 24;
+    let active:
+      | {
+          pointerId: number;
+          startX: number;
+          startY: number;
+          lastX: number;
+          lastY: number;
+          moved: boolean;
+        }
+      | null = null;
+
+    function isSwipeExemptTarget(t: EventTarget | null): boolean {
+      if (!t || !(t instanceof Element)) return false;
+      return Boolean(t.closest('[data-swipe-exempt="true"]'));
+    }
+
+    function directionFromDelta(dx: number, dy: number): { dx: -1 | 0 | 1; dy: -1 | 0 | 1 } | null {
+      if (dx === 0 && dy === 0) return null;
+      const angle = Math.atan2(dy, dx);
+      const octant = Math.round(angle / (Math.PI / 4));
+      const idx = ((octant % 8) + 8) % 8;
+      const dirs = [
+        { dx: 1, dy: 0 },
+        { dx: 1, dy: 1 },
+        { dx: 0, dy: 1 },
+        { dx: -1, dy: 1 },
+        { dx: -1, dy: 0 },
+        { dx: -1, dy: -1 },
+        { dx: 0, dy: -1 },
+        { dx: 1, dy: -1 },
+      ] as const;
+      return dirs[idx] ?? null;
+    }
+
+    function onPointerDown(e: PointerEvent) {
+      if (e.pointerType === "mouse") return;
+      if (!e.isPrimary) return;
+      if (active) return;
+      if (isSwipeExemptTarget(e.target)) return;
+      active = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastX: e.clientX,
+        lastY: e.clientY,
+        moved: false,
+      };
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      if (!active || e.pointerId !== active.pointerId) return;
+      active.lastX = e.clientX;
+      active.lastY = e.clientY;
+      const dx = active.lastX - active.startX;
+      const dy = active.lastY - active.startY;
+      if (!active.moved && Math.hypot(dx, dy) >= MIN_SWIPE_PX) active.moved = true;
+      if (active.moved) e.preventDefault();
+    }
+
+    function endGesture(e: PointerEvent) {
+      if (!active || e.pointerId !== active.pointerId) return;
+      const dx = active.lastX - active.startX;
+      const dy = active.lastY - active.startY;
+      const moved = active.moved && Math.hypot(dx, dy) >= MIN_SWIPE_PX;
+      active = null;
+
+      if (!moved) return;
+      const dir = directionFromDelta(dx, dy);
+      if (!dir || (dir.dx === 0 && dir.dy === 0)) return;
+
+      const store = useRunStore.getState();
+      const state = store.state;
+      if (state.outcome !== "in_progress") return;
+      const to = { x: state.hero.position.x + dir.dx, y: state.hero.position.y + dir.dy };
+      if (!state.currentFloor.grid.inBounds(to)) return;
+      e.preventDefault();
+      store.move(to);
+    }
+
+    function onPointerCancel(e: PointerEvent) {
+      if (!active || e.pointerId !== active.pointerId) return;
+      active = null;
+    }
+
+    window.addEventListener("pointerdown", onPointerDown, { passive: true });
+    window.addEventListener("pointermove", onPointerMove, { passive: false });
+    window.addEventListener("pointerup", endGesture, { passive: false });
+    window.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", endGesture);
+      window.removeEventListener("pointercancel", onPointerCancel);
+    };
+  }, []);
 
   function cycleLocale() {
     const cur = getLocale();

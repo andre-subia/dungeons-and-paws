@@ -20,6 +20,11 @@ export function HUD() {
   const lastKeystone = [...events].reverse().find((e) => e.type === "KEYSTONE_BONUS");
 
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
+  useEffect(() => {
+    const onToggle = () => setInvOpen((v) => !v);
+    window.addEventListener("ui:toggleInventory", onToggle);
+    return () => window.removeEventListener("ui:toggleInventory", onToggle);
+  }, []);
 
   return (
     <div
@@ -109,12 +114,13 @@ export function HUD() {
       </div>
 
       <div
+        data-swipe-exempt="true"
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           marginTop: 4,
-          padding: "10px 10px 0px",
+          padding: "10px 10px 2px",
           borderTop: "1px solid #2a2a3e",
           fontFamily: "ui-monospace, monospace",
         }}
@@ -125,7 +131,7 @@ export function HUD() {
               {t("hud.levelLabel")}&nbsp;{hero.level}
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <div style={{ fontSize: 10, opacity: 0.7, width: 30 }}>{t("hud.xpLabel")}</div>
             <div
               style={{
@@ -147,7 +153,7 @@ export function HUD() {
                 }}
               />
             </div>
-            <div style={{ fontSize: 10, opacity: 0.7, width: 56, textAlign: "right" }}>
+            <div style={{ fontSize: 10, opacity: 0.7, textAlign: "right" }}>
               {hero.xp}/{xpToNextLevel(hero.level)}
             </div>
           </div>
@@ -211,6 +217,7 @@ function InventorySheet({
 
   return (
     <div
+      data-swipe-exempt="true"
       onClick={onClose}
       style={{
         position: "fixed",
