@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GridView } from "./components/GridView.js";
 import { HUD } from "./components/HUD.js";
 import { LOCALES, getLocale, setLocale, subscribeLocaleChange, t } from "./i18n.js";
 import { useRunStore } from "./state/store.js";
 import { useWebHaptics } from "web-haptics/react";
-import type { Cell } from "@gridlore/engine";
+import type { Cell, RunOutcome } from "@gridlore/engine";
 
 /** Order of sections rendered in the help modal. Keys mirror i18n. */
 const HELP_SECTIONS = [
@@ -21,9 +21,12 @@ const HELP_SECTIONS = [
 const ANIM_SPEED_STORAGE_KEY = "gridlore:animSpeed";
 const HAPTICS_STORAGE_KEY = "gridlore:hapticsEnabled";
 const SWIPE_SENSITIVITY_STORAGE_KEY = "gridlore:swipeSensitivity";
+const PLAYER_NAME_STORAGE_KEY = "gridlore:playerName";
+const LEADERBOARD_STORAGE_KEY = "gridlore:leaderboard";
 const DEFAULT_ANIM_SPEED = 0.7;
 const DEFAULT_HAPTICS_ENABLED = true;
 const DEFAULT_SWIPE_SENSITIVITY = 1.25;
+const DEFAULT_PLAYER_NAME = "";
 
 function readAnimSpeed(): number {
   try {
@@ -63,6 +66,53 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
+type LeaderboardEntry = {
+  readonly name: string;
+  readonly score: number;
+  readonly ts: number;
+  readonly seed: string;
+  readonly outcome: Exclude<RunOutcome, "in_progress">;
+};
+
+function readPlayerName(): string {
+  try {
+    const raw = localStorage.getItem(PLAYER_NAME_STORAGE_KEY);
+    return (raw ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function readLeaderboard(): LeaderboardEntry[] {
+  try {
+    const raw = localStorage.getItem(LEADERBOARD_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: LeaderboardEntry[] = [];
+    for (const it of parsed) {
+      if (!it || typeof it !== "object") continue;
+      const o = it as Record<string, unknown>;
+      if (typeof o.name !== "string") continue;
+      if (typeof o.score !== "number") continue;
+      if (typeof o.ts !== "number") continue;
+      if (typeof o.seed !== "string") continue;
+      if (o.outcome !== "win" && o.outcome !== "death") continue;
+      out.push({ name: o.name, score: o.score, ts: o.ts, seed: o.seed, outcome: o.outcome });
+    }
+    out.sort((a, b) => b.score - a.score || b.ts - a.ts);
+    return out.slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
+function writeLeaderboard(entries: readonly LeaderboardEntry[]) {
+  try {
+    localStorage.setItem(LEADERBOARD_STORAGE_KEY, JSON.stringify(entries));
+  } catch {}
+}
+
 export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -70,10 +120,45 @@ export function App() {
   const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
   const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, DEFAULT_HAPTICS_ENABLED));
   const [swipeSensitivity, setSwipeSensitivity] = useState(readSwipeSensitivity);
+  const [playerName, setPlayerName] = useState(() => readPlayerName() || DEFAULT_PLAYER_NAME);
+  const [namePromptOpen, setNamePromptOpen] = useState(() => !readPlayerName());
+  const [nameDraft, setNameDraft] = useState(() => readPlayerName());
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(readLeaderboard);
+  const lastRecordedRef = useRef<string>("");
   const { trigger } = useWebHaptics();
   const score = useRunStore((s) => s.state.meta.score);
   const floorIndex = useRunStore((s) => s.state.currentFloor.index);
+  const outcome = useRunStore((s) => s.state.outcome);
+  const seed = useRunStore((s) => s.state.seed);
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
+
+  useEffect(() => {
+    if (playerName.trim() === "") setNamePromptOpen(true);
+  }, [playerName]);
+
+  useEffect(() => {
+    if (outcome === "in_progress") {
+      lastRecordedRef.current = "";
+      return;
+    }
+    const key = `${seed}:${outcome}`;
+    if (lastRecordedRef.current === key) return;
+    lastRecordedRef.current = key;
+
+    const name = playerName.trim() || "Player";
+    const entry: LeaderboardEntry = {
+      name,
+      score,
+      ts: Date.now(),
+      seed,
+      outcome,
+    };
+    setLeaderboard((prev) => {
+      const next = [entry, ...prev].sort((a, b) => b.score - a.score || b.ts - a.ts).slice(0, 20);
+      writeLeaderboard(next);
+      return next;
+    });
+  }, [outcome, playerName, score, seed]);
 
   const attemptMove = useCallback(
     (to: Cell, source: "tap" | "keyboard") => {
@@ -432,6 +517,17 @@ export function App() {
     } catch {}
   }
 
+  function savePlayerName(raw: string) {
+    const cleaned = raw.trim().slice(0, 18);
+    const finalName = cleaned === "" ? "Player" : cleaned;
+    setPlayerName(finalName);
+    setNameDraft(finalName);
+    try {
+      localStorage.setItem(PLAYER_NAME_STORAGE_KEY, finalName);
+    } catch {}
+    setNamePromptOpen(false);
+  }
+
   function resetSettings() {
     setLocale("en");
     updateAnimSpeed(DEFAULT_ANIM_SPEED);
@@ -531,7 +627,7 @@ export function App() {
         </button>
       </header>
       <GridView animSpeed={animSpeed} onMove={onGridMove} />
-      <HUD />
+      <HUD playerName={playerName} />
 
       {helpOpen && (
         <div
@@ -724,6 +820,26 @@ export function App() {
                 </select>
               </div>
 
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ opacity: 0.85 }}>{t("settings.playerName")}</div>
+                <button
+                  onClick={() => setNamePromptOpen(true)}
+                  style={{
+                    background: "transparent",
+                    color: "#e9e7d8",
+                    border: "1px solid #2a2a3e",
+                    borderRadius: 8,
+                    padding: "6px 8px",
+                    fontFamily: "inherit",
+                    fontSize: 12,
+                    cursor: "pointer",
+                    opacity: 0.95,
+                  }}
+                >
+                  {playerName.trim() || "Player"}
+                </button>
+              </div>
+
               <div style={{ display: "grid", gap: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
                   <div style={{ opacity: 0.85 }}>{t("settings.animSpeed")}</div>
@@ -781,6 +897,122 @@ export function App() {
                 }}
               >
                 {t("settings.reset")}
+              </button>
+
+              {leaderboard.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    borderTop: "1px solid #2a2a3e",
+                    paddingTop: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 11, letterSpacing: 1, textTransform: "uppercase", opacity: 0.8 }}>
+                    {t("settings.leaderboard")}
+                  </div>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    {leaderboard.slice(0, 10).map((e, idx) => (
+                      <div
+                        key={`${e.ts}-${e.seed}`}
+                        style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12 }}
+                      >
+                        <span style={{ opacity: 0.9 }}>{`${idx + 1}. ${e.name}`}</span>
+                        <span style={{ opacity: 0.8, letterSpacing: 0 }}>{e.score}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {namePromptOpen && (
+        <div
+          onClick={() => setNamePromptOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(11, 11, 20, 0.72)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 12,
+            padding: 16,
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(420px, 100%)",
+              background: "#11111c",
+              border: "1px solid #2a2a3e",
+              borderRadius: 10,
+              padding: "14px 14px 12px",
+              color: "#e9e7d8",
+              fontFamily: "ui-monospace, monospace",
+              letterSpacing: 0,
+              opacity: 0.98,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <div style={{ fontWeight: 700 }}>{t("namePrompt.title")}</div>
+              <button
+                onClick={() => setNamePromptOpen(false)}
+                style={{
+                  background: "transparent",
+                  color: "#e9e7d8",
+                  border: "1px solid #2a2a3e",
+                  borderRadius: 6,
+                  padding: "2px 8px",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  lineHeight: "18px",
+                  opacity: 0.9,
+                }}
+              >
+                {t("settings.close")}
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+              <input
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                placeholder={t("namePrompt.placeholder")}
+                autoFocus
+                style={{
+                  width: "100%",
+                  background: "#0b0b14",
+                  color: "#e9e7d8",
+                  border: "1px solid #2a2a3e",
+                  borderRadius: 10,
+                  padding: "10px 10px",
+                  fontFamily: "inherit",
+                  fontSize: 14,
+                  boxSizing: "border-box",
+                }}
+              />
+              <button
+                onClick={() => savePlayerName(nameDraft)}
+                style={{
+                  background: "#2a2a3e",
+                  color: "#e9e7d8",
+                  border: "1px solid #2a2a3e",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 14,
+                  letterSpacing: "0.06em",
+                  opacity: 0.95,
+                }}
+              >
+                {t("namePrompt.save")}
               </button>
             </div>
           </div>

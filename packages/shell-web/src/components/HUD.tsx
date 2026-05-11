@@ -5,7 +5,7 @@ import { subscribeLocaleChange, t, tRune } from "../i18n.js";
 import { RUNE_EMOJI } from "../pixi/palette.js";
 import { useWebHaptics } from "web-haptics/react";
 
-export function HUD() {
+export function HUD({ playerName }: { playerName: string }) {
   const [, bump] = useState(0);
   const state = useRunStore((s) => s.state);
   const reset = useRunStore((s) => s.reset);
@@ -196,6 +196,9 @@ export function HUD() {
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 170 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+            {playerName.trim() !== "" && (
+              <div style={{ fontSize: 12, letterSpacing: 0, opacity: 0.85 }}>{playerName}</div>
+            )}
             <div style={{ fontSize: 16, letterSpacing: "0.06em" }}>
               {t("hud.levelLabel")}&nbsp;{hero.level}
             </div>
