@@ -427,6 +427,8 @@ export class GridRenderer {
         const tile = grid.get(c);
         if (tile.anchored) continue;
         if (tile.kind === "exit" && !exitUnlocked) continue;
+        // Exit already has its own border styling (unlocked/locked) — don't double up.
+        if (tile.kind === "exit") continue;
         // Enemy cards already wear a bright red border — don't double up.
         if (tile.kind === "enemy") continue;
 
