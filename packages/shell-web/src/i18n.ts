@@ -17,17 +17,20 @@ const DICTS: Record<Locale, Dict> = {
     "help.section.goal.title": "GOAL",
     "help.section.goal.body":
       "Reach 🚪 on each floor to advance.\n" +
-      "Survive 3 floors to win the run.\n" +
+      "Survive as many floors as you can — your 🏆 score keeps rising.\n" +
       "If your ♥ HP hits 0 you die.",
     "help.section.move.title": "MOVING",
     "help.section.move.body":
       "Tap a card with a blue border to move there. You move one cell per turn — diagonals included.\n" +
-      "Tap an enemy card to attack instead of moving.",
+      "Tap an enemy card to attack instead of moving.\n" +
+      "If a 🔑 appears, tap its tile to step onto it and pick it up.",
     "help.section.cat.title": "YOUR CAT 🐱",
     "help.section.cat.body":
       "♥ HP — health, you die at 0\n" +
       "⚔ Attack — damage you deal in combat\n" +
       "🛡 Armor — absorbs damage before HP\n" +
+      "↑ Level/XP — gain XP from runes and kills; leveling raises ♥ max HP\n" +
+      "🧪 Potions — heal 5 ♥ (gain 1 every 3 🌿 Bramble, max 2)\n" +
       "◆ Focus — saved for future abilities\n" +
       "🪙 Gold — saved for future shops",
     "help.section.runes.title": "RUNES (consumed when stepped on)",
@@ -49,8 +52,9 @@ const DICTS: Record<Locale, Dict> = {
       "The HUD strip shows R / C charge progress per lattice.",
     "help.section.exit.title": "EXIT 🚪",
     "help.section.exit.body":
-      "On Floor 1 the exit is LOCKED 🔒. Charge any lattice to unlock it.\n" +
-      "On Floors 2 and 3 the exit is open from the start.",
+      "Some exits are LOCKED 🔒.\n" +
+      "Floor 1: charge any lattice ⚡ to unlock 🚪.\n" +
+      "Other floors: sometimes you need a 🔑. The key-carrying enemy is marked with 🔑 — defeat it to drop the key on its cell. Your cat stays put; on the next turn step onto 🔑 to unlock the exit.",
     "help.section.enemies.title": "ENEMIES",
     "help.section.enemies.body":
       "🦇 Bat · 🐀 Rat · 🐍 Snake · 🕷 Spider · 💀 Skeleton · 👻 Ghost · 🟢 Slime · 👹 Ogre\n" +
@@ -61,11 +65,11 @@ const DICTS: Record<Locale, Dict> = {
       "Killing an enemy removes its rune from the grid — that can decharge a lattice.",
     "help.section.tips.title": "TIPS",
     "help.section.tips.body":
-      "Floor 1: 2 weak enemies. Floor 2: 3 mixed. Floor 3: 4 — 👹 Ogre may appear (5♥ ⚔2).\n" +
       "Stack 🦴 Bone and 💧 Tide for healing.\n" +
       "⚙️ Iron armor turns scary fights into manageable ones.\n" +
-      "Avoid sitting next to 🐍 Snake / 👻 Ghost / 👹 Ogre — they hit hard every turn.\n" +
-      "Sometimes it's better to leave an enemy alive to keep your lattice charged.",
+      "🌿 Bramble: every 3 consumed → +1 🧪 potion (up to your max).\n" +
+      "Level up to increase ♥ max HP.\n" +
+      "When the exit needs a 🔑, look for the enemy marked with 🔑.",
     "hud.newRun": "new run",
     "hud.floorLabel": "FLOOR",
     "hud.scoreLabel": "SCORE",
@@ -150,17 +154,20 @@ const DICTS: Record<Locale, Dict> = {
     "help.section.goal.title": "OBJETIVO",
     "help.section.goal.body":
       "Llega a 🚪 en cada piso para avanzar.\n" +
-      "Sobrevive 3 pisos para ganar la partida.\n" +
+      "Sobrevive tantos pisos como puedas — tu 🏆 puntaje sigue subiendo.\n" +
       "Si tu ♥ HP llega a 0, mueres.",
     "help.section.move.title": "MOVIMIENTO",
     "help.section.move.body":
       "Toca una carta con borde azul para moverte. Te mueves una casilla por turno — diagonales incluidas.\n" +
-      "Toca a un enemigo para atacarlo en vez de moverte.",
+      "Toca a un enemigo para atacarlo en vez de moverte.\n" +
+      "Si aparece una 🔑, tócala para pisarla y recogerla.",
     "help.section.cat.title": "TU GATO 🐱",
     "help.section.cat.body":
       "♥ HP — vida, mueres en 0\n" +
       "⚔ Ataque — daño que infliges en combate\n" +
       "🛡 Armadura — absorbe daño antes que el HP\n" +
+      "↑ Nivel/EXP — ganas EXP por runas y bajas; subir aumenta tu ♥ HP máximo\n" +
+      "🧪 Pociones — curan 5 ♥ (ganas 1 cada 3 🌿 Zarzas, máximo 2)\n" +
       "◆ Foco — reservado para habilidades futuras\n" +
       "🪙 Oro — reservado para tiendas futuras",
     "help.section.runes.title": "RUNAS (se consumen al pisar)",
@@ -182,8 +189,9 @@ const DICTS: Record<Locale, Dict> = {
       "La barra del HUD muestra el progreso F / C de cada lattice.",
     "help.section.exit.title": "SALIDA 🚪",
     "help.section.exit.body":
-      "En el Piso 1 la salida está BLOQUEADA 🔒. Carga cualquier lattice para desbloquearla.\n" +
-      "En los Pisos 2 y 3 la salida está abierta desde el inicio.",
+      "A veces la salida está BLOQUEADA 🔒.\n" +
+      "Piso 1: carga cualquier lattice ⚡ para desbloquear 🚪.\n" +
+      "Otros pisos: a veces necesitas una 🔑. El enemigo que la tiene está marcado con 🔑 — al derrotarlo la llave cae en su celda. Tu gato se queda en su sitio; en el siguiente turno pisa la 🔑 para abrir la salida.",
     "help.section.enemies.title": "ENEMIGOS",
     "help.section.enemies.body":
       "🦇 Murciélago · 🐀 Rata · 🐍 Serpiente · 🕷 Araña · 💀 Esqueleto · 👻 Fantasma · 🟢 Slime · 👹 Ogro\n" +
@@ -194,11 +202,11 @@ const DICTS: Record<Locale, Dict> = {
       "Matar un enemigo retira su runa del tablero — puede descargar una lattice.",
     "help.section.tips.title": "CONSEJOS",
     "help.section.tips.body":
-      "Piso 1: 2 enemigos débiles. Piso 2: 3 mixtos. Piso 3: 4 — puede aparecer 👹 Ogro (5♥ ⚔2).\n" +
       "Acumula runas 🦴 y 💧 para curarte.\n" +
       "⚙️ La armadura de Hierro convierte peleas difíciles en manejables.\n" +
-      "Evita quedarte al lado de 🐍 / 👻 / 👹 — pegan fuerte cada turno.\n" +
-      "A veces conviene dejar vivo a un enemigo para mantener tu lattice cargada.",
+      "🌿 Zarza: cada 3 consumidas → +1 🧪 poción (hasta tu máximo).\n" +
+      "Sube de nivel para aumentar tu ♥ HP máximo.\n" +
+      "Si la salida pide 🔑, busca al enemigo marcado con 🔑.",
     "hud.newRun": "nueva partida",
     "hud.floorLabel": "PISO",
     "hud.scoreLabel": "PUNTAJE",
@@ -283,17 +291,20 @@ const DICTS: Record<Locale, Dict> = {
     "help.section.goal.title": "OBJETIVO",
     "help.section.goal.body":
       "Chegue a 🚪 em cada andar para avançar.\n" +
-      "Sobreviva a 3 andares para vencer a partida.\n" +
+      "Sobreviva o máximo de andares possível — sua 🏆 pontuação só aumenta.\n" +
       "Se seu ♥ HP chegar a 0, você morre.",
     "help.section.move.title": "MOVIMENTO",
     "help.section.move.body":
       "Toque numa carta com borda azul para se mover. Você move uma casa por turno — diagonais inclusas.\n" +
-      "Toque um inimigo para atacar em vez de se mover.",
+      "Toque um inimigo para atacar em vez de se mover.\n" +
+      "Se aparecer uma 🔑, toque nela para pisar e coletar.",
     "help.section.cat.title": "SEU GATO 🐱",
     "help.section.cat.body":
       "♥ HP — vida, você morre em 0\n" +
       "⚔ Ataque — dano que você causa em combate\n" +
       "🛡 Armadura — absorve dano antes do HP\n" +
+      "↑ Nível/EXP — ganha EXP por runas e abates; subir aumenta o ♥ HP máximo\n" +
+      "🧪 Poções — curam 5 ♥ (ganha 1 a cada 3 🌿 Espinho, máximo 2)\n" +
       "◆ Foco — reservado para habilidades futuras\n" +
       "🪙 Ouro — reservado para lojas futuras",
     "help.section.runes.title": "RUNAS (consumidas ao pisar)",
@@ -315,8 +326,9 @@ const DICTS: Record<Locale, Dict> = {
       "A faixa do HUD mostra o progresso L / C de cada lattice.",
     "help.section.exit.title": "SAÍDA 🚪",
     "help.section.exit.body":
-      "No Andar 1 a saída está TRAVADA 🔒. Carregue qualquer lattice para destravá-la.\n" +
-      "Nos Andares 2 e 3 a saída está aberta desde o início.",
+      "Às vezes a saída está TRAVADA 🔒.\n" +
+      "Andar 1: carregue qualquer lattice ⚡ para destravar 🚪.\n" +
+      "Outros andares: às vezes você precisa de uma 🔑. O inimigo que carrega a chave fica marcado com 🔑 — ao derrotá-lo, a chave cai na casa dele. Seu gato fica no lugar; no próximo turno pise na 🔑 para destravar a saída.",
     "help.section.enemies.title": "INIMIGOS",
     "help.section.enemies.body":
       "🦇 Morcego · 🐀 Rato · 🐍 Cobra · 🕷 Aranha · 💀 Esqueleto · 👻 Fantasma · 🟢 Slime · 👹 Ogro\n" +
@@ -327,11 +339,11 @@ const DICTS: Record<Locale, Dict> = {
       "Matar um inimigo remove sua runa do tabuleiro — pode descarregar uma lattice.",
     "help.section.tips.title": "DICAS",
     "help.section.tips.body":
-      "Andar 1: 2 inimigos fracos. Andar 2: 3 mistos. Andar 3: 4 — pode surgir 👹 Ogro (5♥ ⚔2).\n" +
       "Acumule runas 🦴 e 💧 para curar.\n" +
       "⚙️ A armadura de Ferro transforma lutas difíceis em algo gerenciável.\n" +
-      "Evite ficar ao lado de 🐍 / 👻 / 👹 — batem forte a cada turno.\n" +
-      "Às vezes vale deixar um inimigo vivo para manter sua lattice carregada.",
+      "🌿 Espinho: a cada 3 consumidos → +1 🧪 poção (até o máximo).\n" +
+      "Suba de nível para aumentar o ♥ HP máximo.\n" +
+      "Se a saída pedir 🔑, procure o inimigo marcado com 🔑.",
     "hud.newRun": "novo jogo",
     "hud.floorLabel": "ANDAR",
     "hud.scoreLabel": "PONTOS",
