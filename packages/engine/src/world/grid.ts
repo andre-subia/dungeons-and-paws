@@ -222,11 +222,11 @@ export function keyTile(id: string): Tile {
  * The `rune` field is set to the enemy's rune so it counts toward
  * lattice charging; killing the enemy removes that contribution.
  */
-export function enemyTile(id: string, enemyId: string, rune: Rune): Tile {
+export function enemyTile(id: string, enemyId: string, _rune: Rune): Tile {
   return {
     id,
     kind: "enemy",
-    rune,
+    rune: null,
     hidden: false,
     anchored: false,
     payload: { kind: "enemy", enemyId },

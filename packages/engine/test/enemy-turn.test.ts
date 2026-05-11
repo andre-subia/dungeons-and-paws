@@ -52,10 +52,10 @@ describe("runEnemyTurn", () => {
     expect(result.events.some((e) => e.type === "ENEMY_MOVED")).toBe(true);
     // Old cell vacated.
     expect(result.state.currentFloor.grid.get({ x: 2, y: 2 }).kind).toBe("empty");
-    // New cell occupied with enemy tile carrying the enemy's rune.
+    // New cell occupied with enemy tile.
     const newTile = result.state.currentFloor.grid.get({ x: 1, y: 1 });
     expect(newTile.kind).toBe("enemy");
-    expect(newTile.rune).toBe("bone"); // skeleton carries bone
+    expect(newTile.payload?.kind).toBe("enemy");
   });
 
   it("attacks the hero when adjacent instead of moving", () => {

@@ -62,6 +62,7 @@ export function spawnEndOfTurnRune(state: RunState): ResolveResult {
   for (const { cell, tile } of state.currentFloor.grid.each()) {
     if (tile.kind !== "empty") continue;
     if (cellEq(cell, state.hero.position)) continue;
+    if (cellEq(cell, state.currentFloor.exitCell)) continue;
     empties.push(cell);
   }
   if (empties.length === 0) return { state, events: [] };
