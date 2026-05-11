@@ -35,6 +35,8 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
     return { state, events: [], enemyKilled: false };
   }
 
+  const hasKeyAlready = gridHasAnyKey(state.currentFloor.grid);
+
   const enemyId = tile.payload.enemyId;
   const enemy = state.currentFloor.enemies.get(enemyId);
   if (!enemy) {
@@ -42,7 +44,10 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
     const dropsKey =
       state.currentFloor.exitRequiresKey &&
       !state.currentFloor.exitUnlocked &&
+      !hasKeyAlready &&
       (state.currentFloor.keyEnemyId === enemyId || state.currentFloor.enemies.size === 0);
+    const shouldClearKeyEnemyId =
+      state.currentFloor.keyEnemyId === enemyId || state.currentFloor.enemies.size === 0;
     const grid = state.currentFloor.grid.set(
       cell,
       dropsKey
@@ -55,7 +60,7 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
         currentFloor: {
           ...state.currentFloor,
           grid,
-          keyEnemyId: dropsKey ? null : state.currentFloor.keyEnemyId,
+          keyEnemyId: dropsKey || shouldClearKeyEnemyId ? null : state.currentFloor.keyEnemyId,
         },
       },
       events: dropsKey
@@ -95,6 +100,7 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
     const dropsKey =
       state.currentFloor.exitRequiresKey &&
       !state.currentFloor.exitUnlocked &&
+      !hasKeyAlready &&
       (state.currentFloor.keyEnemyId === enemyId || nextEnemies.size === 0);
     nextGrid = nextGrid.set(
       cell,
@@ -105,6 +111,8 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
     events.push({ type: "ENEMY_KILLED", enemyId, cell });
     if (dropsKey) {
       events.push({ type: "KEY_DROPPED", cell });
+    }
+    if (state.currentFloor.keyEnemyId === enemyId || nextEnemies.size === 0) {
       nextKeyEnemyId = null;
     }
     nextMeta = { ...nextMeta, score: nextMeta.score + 200 };
@@ -156,4 +164,11 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
     events,
     enemyKilled: killed,
   };
+}
+
+function gridHasAnyKey(grid: RunState["currentFloor"]["grid"]): boolean {
+  for (const { tile } of grid.each()) {
+    if (tile.kind === "key") return true;
+  }
+  return false;
 }

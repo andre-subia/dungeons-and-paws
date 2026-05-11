@@ -59,7 +59,6 @@ export function App() {
           padding: "4px 8px 0",
           letterSpacing: "0.12em",
           fontSize: 12,
-          opacity: 0.7,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -96,7 +95,7 @@ export function App() {
           }}
         >
           <span>{t("app.title")}</span>
-          <span style={{ opacity: 0.75, letterSpacing: 0 }}>{`🏆 ${score}`}</span>
+          <span style={{ letterSpacing: 0 }}>{`🏆 ${score}`}</span>
         </div>
         <button
           onClick={() => setHelpOpen(true)}

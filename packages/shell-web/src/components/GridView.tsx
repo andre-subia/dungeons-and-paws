@@ -30,7 +30,8 @@ export function GridView() {
       r.setMoveHandler((cell) => {
         useRunStore.getState().move(cell);
       });
-      r.render(useRunStore.getState().state);
+      const snap = useRunStore.getState();
+      r.render(snap.state, snap.lastEvents);
       r.resize();
 
       observer = new ResizeObserver(() => {
@@ -40,10 +41,11 @@ export function GridView() {
     });
 
     const unsub = useRunStore.subscribe((s) => {
-      rendererRef.current?.render(s.state);
+      rendererRef.current?.render(s.state, s.lastEvents);
     });
     const unsubLocale = subscribeLocaleChange(() => {
-      rendererRef.current?.render(useRunStore.getState().state);
+      const snap = useRunStore.getState();
+      rendererRef.current?.render(snap.state, snap.lastEvents);
     });
 
     return () => {

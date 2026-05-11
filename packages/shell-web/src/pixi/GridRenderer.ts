@@ -16,7 +16,7 @@
  */
 
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from "pixi.js";
-import { chebyshev, cellEq, type Cell, type RunState, type Tile } from "@gridlore/engine";
+import { chebyshev, cellEq, type Cell, type GameEvent, type RunState, type Tile } from "@gridlore/engine";
 import { t } from "../i18n.js";
 import {
   COLORS,
@@ -39,6 +39,10 @@ const CARD_ASPECT = 9 / 16;
 const CARD_MARGIN_FRAC = 0.07;
 const TILE_EMOJI_SCALE = 0.52;
 const HERO_EMOJI_SCALE = 0.52;
+const ANIM_SPEED = 0.7;
+const ATTACK_LUNGE_MS = Math.round(360 / ANIM_SPEED);
+const HIT_FLASH_MS = Math.round(260 / ANIM_SPEED);
+const DAMAGE_FLOAT_MS = Math.round(560 / ANIM_SPEED);
 
 export class GridRenderer {
   private readonly app: Application;
@@ -48,10 +52,18 @@ export class GridRenderer {
   private readonly highlightLayer: Container;
   private readonly heroLayer: Container;
   private readonly dividerLayer: Container;
+  private readonly animationLayer: Container;
   private cellWidth = 0;
   private cellHeight = 0;
   private currentState: RunState | null = null;
+  private lastAnimKey: string | null = null;
   private moveHandler: MoveHandler = () => {};
+  private readonly activeAnimations: {
+    readonly node: Container;
+    elapsedMs: number;
+    readonly durationMs: number;
+    readonly update: (t: number) => void;
+  }[] = [];
 
   constructor(app: Application) {
     this.app = app;
@@ -63,12 +75,19 @@ export class GridRenderer {
     this.highlightLayer = new Container();
     this.tileLayer = new Container();
     this.heroLayer = new Container();
+    this.animationLayer = new Container();
 
     this.board.addChild(this.cellLayer);
     this.board.addChild(this.dividerLayer);
     this.board.addChild(this.highlightLayer);
     this.board.addChild(this.tileLayer);
     this.board.addChild(this.heroLayer);
+    this.board.addChild(this.animationLayer);
+
+    this.app.ticker.add((ticker) => {
+      const dtMs = (ticker.deltaMS ?? 16.6667) as number;
+      this.stepAnimations(dtMs);
+    });
   }
 
   static async create(parent: HTMLElement): Promise<GridRenderer> {
@@ -107,7 +126,7 @@ export class GridRenderer {
     if (this.currentState) this.render(this.currentState);
   }
 
-  render(state: RunState): void {
+  render(state: RunState, events?: readonly GameEvent[]): void {
     this.currentState = state;
     this.layout();
     this.drawCells();
@@ -115,6 +134,175 @@ export class GridRenderer {
     this.drawTiles();
     this.drawHighlights();
     this.drawHero();
+    if (events && events.length > 0) this.maybeAnimate(events, state);
+  }
+
+  private stepAnimations(dtMs: number): void {
+    if (this.activeAnimations.length === 0) return;
+    for (let i = this.activeAnimations.length - 1; i >= 0; i--) {
+      const a = this.activeAnimations[i]!;
+      a.elapsedMs += dtMs;
+      const t = Math.max(0, Math.min(1, a.elapsedMs / a.durationMs));
+      a.update(t);
+      if (t >= 1) {
+        a.node.destroy({ children: true });
+        this.activeAnimations.splice(i, 1);
+      }
+    }
+  }
+
+  private maybeAnimate(events: readonly GameEvent[], state: RunState): void {
+    const key = this.eventsKey(events, state);
+    if (this.lastAnimKey === key) return;
+    this.lastAnimKey = key;
+
+    for (const e of events) {
+      if (e.type !== "DAMAGE_DEALT") continue;
+      if (e.amount <= 0) continue;
+      const source = e.source;
+      const target = e.target;
+      const heroId = "hero";
+
+      if (source === heroId && target !== heroId) {
+        const heroCell = state.hero.position;
+        const targetCell = this.enemyCellFromEventsOrState(String(target), events, state);
+        if (!targetCell) continue;
+        this.animateAttack({
+          attackerEmoji: HERO_EMOJI,
+          from: heroCell,
+          to: targetCell,
+          showDamage: e.amount,
+        });
+      } else if (target === heroId && source !== heroId) {
+        const enemyId = String(source);
+        const enemyCell = this.enemyCellFromEventsOrState(enemyId, events, state);
+        if (!enemyCell) continue;
+        const enemy = state.currentFloor.enemies.get(enemyId);
+        const emoji = enemy ? ENEMY_EMOJI[enemy.templateId] ?? "👾" : "👾";
+        this.animateAttack({
+          attackerEmoji: emoji,
+          from: enemyCell,
+          to: state.hero.position,
+          showDamage: e.amount,
+        });
+      }
+    }
+  }
+
+  private eventsKey(events: readonly GameEvent[], state: RunState): string {
+    const parts: string[] = [`t:${state.turn}`, `f:${state.currentFloor.turn}`];
+    for (const e of events) {
+      switch (e.type) {
+        case "DAMAGE_DEALT":
+          parts.push(`d:${e.source}:${e.target}:${e.amount}`);
+          break;
+        case "ENEMY_ATTACKED":
+          parts.push(`ea:${e.enemyId}:${e.cell.x},${e.cell.y}`);
+          break;
+        case "ENEMY_KILLED":
+          parts.push(`ek:${e.enemyId}:${e.cell.x},${e.cell.y}`);
+          break;
+        case "HERO_DAMAGED":
+          parts.push(`hd:${e.amount}:${e.hpAfter}`);
+          break;
+        default:
+          break;
+      }
+    }
+    return parts.join("|");
+  }
+
+  private enemyCellFromEventsOrState(
+    enemyId: string,
+    events: readonly GameEvent[],
+    state: RunState,
+  ): Cell | null {
+    const alive = state.currentFloor.enemies.get(enemyId);
+    if (alive) return alive.position;
+    for (const e of events) {
+      if (e.type === "ENEMY_KILLED" && e.enemyId === enemyId) return e.cell;
+      if (e.type === "ENEMY_ATTACKED" && e.enemyId === enemyId) return e.cell;
+    }
+    return null;
+  }
+
+  private animateAttack(opts: { attackerEmoji: string; from: Cell; to: Cell; showDamage: number }): void {
+    const fromPx = this.cellCenterPx(opts.from);
+    const toPx = this.cellCenterPx(opts.to);
+    const lunge = new Text({
+      text: opts.attackerEmoji,
+      style: {
+        fontFamily: EMOJI_FONT_FAMILY,
+        fontSize: Math.max(12, Math.floor(this.cardDims().cardW * 0.42)),
+        fill: 0xffffff,
+      },
+    });
+    lunge.anchor.set(0.5);
+    lunge.position.set(fromPx.x, fromPx.y);
+    this.animationLayer.addChild(lunge);
+
+    const durationMs = ATTACK_LUNGE_MS;
+    const update = (t: number) => {
+      const phase = t < 0.55 ? t / 0.55 : 1 - (t - 0.55) / 0.45;
+      const eased = easeOutCubic(Math.max(0, Math.min(1, phase)));
+      lunge.position.set(lerp(fromPx.x, toPx.x, eased), lerp(fromPx.y, toPx.y, eased));
+      const s = 1 + 0.12 * Math.sin(Math.PI * Math.min(1, t));
+      lunge.scale.set(s);
+      lunge.alpha = 1 - 0.15 * t;
+      if (t >= 0.55) lunge.alpha = 0.85;
+    };
+    this.activeAnimations.push({ node: lunge, elapsedMs: 0, durationMs, update });
+
+    this.hitFlash(opts.to);
+    this.damageNumber(opts.to, opts.showDamage);
+  }
+
+  private hitFlash(cell: Cell): void {
+    const { cardW, cardH, marginX, marginY, radius } = this.cardDims();
+    const x = cell.x * this.cellWidth + marginX;
+    const y = cell.y * this.cellHeight + marginY;
+    const g = new Graphics();
+    g.roundRect(x, y, cardW, cardH, radius).fill({ color: 0xff3b3b, alpha: 0.35 });
+    g.alpha = 0;
+    this.animationLayer.addChild(g);
+    const durationMs = HIT_FLASH_MS;
+    const update = (t: number) => {
+      const peak = Math.sin(Math.PI * t);
+      g.alpha = 0.55 * peak;
+    };
+    this.activeAnimations.push({ node: g, elapsedMs: 0, durationMs, update });
+  }
+
+  private damageNumber(cell: Cell, amount: number): void {
+    const c = this.cellCenterPx(cell);
+    const dmg = new Text({
+      text: `-${amount}`,
+      style: {
+        fontFamily: "ui-monospace, SF Mono, monospace",
+        fontSize: Math.max(12, Math.floor(this.cardDims().cardW * 0.18)),
+        fill: 0xffffff,
+        fontWeight: "800",
+        stroke: { color: 0x000000, width: 3 },
+      },
+    });
+    dmg.anchor.set(0.5);
+    dmg.position.set(c.x, c.y - this.cardDims().cardH * 0.12);
+    this.animationLayer.addChild(dmg);
+    const durationMs = DAMAGE_FLOAT_MS;
+    const update = (t: number) => {
+      dmg.alpha = 1 - t;
+      dmg.position.set(c.x, c.y - this.cardDims().cardH * (0.12 + 0.22 * easeOutCubic(t)));
+      const s = 1 + 0.1 * Math.sin(Math.PI * (1 - t));
+      dmg.scale.set(s);
+    };
+    this.activeAnimations.push({ node: dmg, elapsedMs: 0, durationMs, update });
+  }
+
+  private cellCenterPx(cell: Cell): { x: number; y: number } {
+    return {
+      x: cell.x * this.cellWidth + this.cellWidth / 2,
+      y: cell.y * this.cellHeight + this.cellHeight / 2,
+    };
   }
 
   private layout(): void {
@@ -550,4 +738,13 @@ function isCellInChargedLattice(state: RunState, cell: Cell): boolean {
   if (snap.byId.get(`column:${cell.x}`)?.isCharged) return true;
   const idx = state.currentFloor.grid.chamberIndex(cell);
   return snap.byId.get(`chamber:${idx}`)?.isCharged === true;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function easeOutCubic(t: number): number {
+  const u = 1 - t;
+  return 1 - u * u * u;
 }

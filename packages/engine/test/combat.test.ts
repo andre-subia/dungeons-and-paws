@@ -3,7 +3,7 @@ import { resolveCombatAt } from "../src/sim/combat.js";
 import { applyInput } from "../src/sim/turn.js";
 import { makeInitialRunState } from "../src/run/state.js";
 import { generateFloor } from "../src/generation/floor.js";
-import { enemyTile, SMALL_GRID } from "../src/world/grid.js";
+import { enemyTile, keyTile, SMALL_GRID } from "../src/world/grid.js";
 import { recomputeLattices } from "../src/world/lattice.js";
 import { ENEMY_TEMPLATES } from "../src/entities/enemy-templates.js";
 import { makeBlankRunState } from "./_helpers.js";
@@ -158,6 +158,31 @@ describe("turn pipeline + combat", () => {
 
     const heroDamagedEvents = result.events.filter((e) => e.type === "HERO_DAMAGED");
     expect(heroDamagedEvents).toHaveLength(1);
+  });
+
+  it("does not drop a second key if a key already exists on the grid", () => {
+    let state = makeBlankRunState({ seed: "T-ONE-KEY", heroSpawn: { x: 0, y: 0 }, dims: SMALL_GRID });
+    state = {
+      ...state,
+      currentFloor: {
+        ...state.currentFloor,
+        exitRequiresKey: true,
+        exitUnlocked: false,
+        keyEnemyId: null,
+        grid: state.currentFloor.grid.set({ x: 2, y: 2 }, keyTile("k1")),
+      },
+    };
+    state = placeEnemy(state, { x: 1, y: 0 }, "bat");
+    const enemyId = Array.from(state.currentFloor.enemies.keys())[0]!;
+    const e0 = state.currentFloor.enemies.get(enemyId)!;
+    const enemies = new Map(state.currentFloor.enemies);
+    enemies.set(enemyId, { ...e0, hp: 1, hpMax: 1 });
+    state = { ...state, currentFloor: { ...state.currentFloor, enemies } };
+
+    const result = applyInput(state, { type: "MOVE", from: { x: 0, y: 0 }, to: { x: 1, y: 0 } });
+    expect(result.state.currentFloor.grid.get({ x: 2, y: 2 }).kind).toBe("key");
+    expect(result.state.currentFloor.grid.get({ x: 1, y: 0 }).kind).not.toBe("key");
+    expect(result.events.some((e) => e.type === "KEY_DROPPED" && e.cell.x === 1 && e.cell.y === 0)).toBe(false);
   });
 
   it("walking onto a tougher enemy keeps the hero in place if it survives", () => {
