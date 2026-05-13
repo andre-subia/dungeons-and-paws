@@ -19,15 +19,7 @@ export type TitleCardEntry = {
   readonly emoji: string;
 };
 
-const PLACEHOLDER_CHALLENGERS: ReadonlyArray<TitleCardEntry> = [
-  { name: "???", score: 0, floor: 0, emoji: "🦇" },
-  { name: "???", score: 0, floor: 0, emoji: "🕷" },
-  { name: "???", score: 0, floor: 0, emoji: "🐱" },
-  { name: "???", score: 0, floor: 0, emoji: "💀" },
-  { name: "???", score: 0, floor: 0, emoji: "👹" },
-];
-
-const FEATURE_ICONS = ["♥", "✦", "♥"] as const;
+const FEATURE_ICONS = ["🐾", "◆", "💀"] as const;
 const FEATURE_KEYS = ["realRuns", "lattices", "builtForLoss"] as const;
 
 export function TitleScreen({
@@ -49,22 +41,18 @@ export function TitleScreen({
   onOpenLeaderboard: () => void;
   onOpenName: () => void;
 }) {
-  const challengers: TitleCardEntry[] = [];
-  for (let i = 0; i < 5; i++) {
-    const real = topRuns[i];
-    challengers.push(real ?? PLACEHOLDER_CHALLENGERS[i]!);
-  }
+  const challengers = topRuns.slice(0, 5);
   const ctaLabel = canContinue ? t("title.continue") : t("title.cta");
   const displayName = playerName.trim() || "PLAYER";
 
   return (
     <div
+      className="dap-title-root"
       style={{
         position: "relative",
         height: "100%",
         width: "100%",
-        overflowY: "auto",
-        padding: "14px clamp(14px, 4vw, 56px) 24px",
+        overflow: "hidden",
         boxSizing: "border-box",
         color: COLORS.text,
         fontFamily: FONTS.body,
@@ -91,7 +79,7 @@ export function TitleScreen({
           className="dap-cta"
           style={{
             ...pixelButtonPrimary,
-            fontSize: 13,
+            fontSize: 14,
             padding: "14px 26px",
           }}
         >
@@ -106,6 +94,7 @@ export function TitleScreen({
             whiteSpace: "pre-line",
             lineHeight: 1.5,
             color: COLORS.textMuted,
+            fontSize: 10,
           }}
         >
           {t("title.ctaNote")}
@@ -114,7 +103,7 @@ export function TitleScreen({
         <SansBubble />
       </div>
 
-      <div style={{ marginTop: 22 }}>
+      <div>
         <div
           style={{
             display: "flex",
@@ -130,7 +119,7 @@ export function TitleScreen({
             style={{
               ...pixelChip,
               fontFamily: FONTS.display,
-              fontSize: 8,
+              fontSize: 9,
               letterSpacing: "0.18em",
               padding: "5px 9px",
             }}
@@ -138,7 +127,7 @@ export function TitleScreen({
             {t("title.menuLeaderboard")}
           </button>
         </div>
-        <ChallengerStrip challengers={challengers} />
+        {challengers.length > 0 ? <ChallengerStrip challengers={challengers} /> : <RunsEmptyState />}
       </div>
 
       <div className="dap-bottom-tags">
@@ -147,8 +136,8 @@ export function TitleScreen({
         </div>
         <div style={{ ...sectionLabel, color: COLORS.textFaint }}>
           {t("title.bottomRight")}{" "}
-          <span style={{ color: COLORS.heart }} className="dap-pulse">
-            ♥
+          <span style={{ color: COLORS.primary }} className="dap-pulse">
+            🐾
           </span>
         </div>
       </div>
@@ -174,20 +163,27 @@ function TopBar({
   return (
     <div className="dap-title-topbar">
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ color: COLORS.heart, fontSize: 18 }} className="dap-pulse">
-          ♥
+        <span style={{ color: COLORS.primary, fontSize: 18 }} className="dap-pulse">
+          🐾
         </span>
-        <span style={{ ...sectionLabel, lineHeight: 1.2, fontSize: 8, whiteSpace: "pre-line" }}>
+        <span
+          style={{
+            ...sectionLabel,
+            lineHeight: 1.2,
+            fontSize: "clamp(9px, 2.6vw, 10px)",
+            whiteSpace: "pre-line",
+          }}
+        >
           {t("title.tagline")}
         </span>
       </div>
       <div
         style={{
           ...sectionLabel,
-          fontSize: 8,
+          fontSize: "clamp(9px, 2.6vw, 10px)",
           letterSpacing: "0.22em",
           textAlign: "center",
-          opacity: 0.7,
+          color: COLORS.textFaint,
         }}
       >
         ✦ {t("title.crest")} ✦
@@ -231,21 +227,20 @@ function HeroBlock() {
         style={{
           ...displayHeading,
           margin: 0,
-          fontSize: "clamp(22px, 4.8vw, 56px)",
-          lineHeight: 1.04,
+          fontSize: "clamp(34px, 9.2vw, 86px)",
+          letterSpacing: "0.01em",
+          wordSpacing: "-0.2em",
+          lineHeight: 1.02,
         }}
       >
-        <div>{t("title.heroLine1")}</div>
-        <div>{t("title.heroLine2")}</div>
-        <div>{t("title.heroLine3")}</div>
         <div>
-          {t("title.heroLine4")}
+          Dungeon & Paws
           <span
             aria-hidden="true"
             className="dap-pulse"
-            style={{ color: COLORS.heart, marginLeft: 10, display: "inline-block" }}
+            style={{ color: COLORS.primary, marginLeft: 10, display: "inline-block" }}
           >
-            ♥
+            🐾
           </span>
         </div>
       </h1>
@@ -253,8 +248,8 @@ function HeroBlock() {
         style={{
           marginTop: 18,
           fontFamily: FONTS.body,
-          fontSize: 16,
-          letterSpacing: "0.06em",
+          fontSize: "clamp(16px, 4.6vw, 20px)",
+          letterSpacing: "0.04em",
           lineHeight: 1.5,
           whiteSpace: "pre-line",
           color: COLORS.textMuted,
@@ -311,7 +306,7 @@ function FeatureRow({
         <div
           style={{
             fontFamily: FONTS.display,
-            fontSize: 10,
+            fontSize: 11,
             letterSpacing: "0.16em",
             color: COLORS.text,
             marginBottom: 6,
@@ -319,7 +314,7 @@ function FeatureRow({
         >
           {title}
         </div>
-        <div style={{ fontSize: 15, lineHeight: 1.4, color: COLORS.textMuted }}>{body}</div>
+        <div style={{ fontSize: 16, lineHeight: 1.4, color: COLORS.textMuted }}>{body}</div>
       </div>
     </div>
   );
@@ -350,7 +345,7 @@ function FloweyBubble() {
         }}
         aria-hidden="true"
       >
-        🌼
+        🕯
       </div>
       <div style={{ fontSize: 14, lineHeight: 1.35 }}>
         <div>{t("title.flowey1")}</div>
@@ -408,6 +403,28 @@ function ChallengerStrip({ challengers }: { challengers: ReadonlyArray<TitleCard
   );
 }
 
+function RunsEmptyState() {
+  return (
+    <div
+      style={{
+        ...pixelCard,
+        padding: "14px 14px",
+        display: "grid",
+        gap: 8,
+        placeItems: "center",
+        textAlign: "center",
+      }}
+    >
+      <div style={{ fontFamily: FONTS.display, fontSize: 9, letterSpacing: "0.16em", color: COLORS.text }}>
+        {t("title.runsEmpty")}
+      </div>
+      <div style={{ fontFamily: FONTS.body, fontSize: 16, color: COLORS.textMuted, lineHeight: 1.35 }}>
+        {t("title.runsEmptyHint")}
+      </div>
+    </div>
+  );
+}
+
 function ChallengerCard({
   entry,
   highlight,
@@ -417,7 +434,6 @@ function ChallengerCard({
   highlight: boolean;
   rank: number;
 }) {
-  const isPlaceholder = entry.score === 0 && entry.name === "???";
   const cardStyle: CSSProperties = {
     position: "relative",
     background: COLORS.bgPanel,
@@ -432,7 +448,7 @@ function ChallengerCard({
     boxShadow: highlight
       ? `0 0 0 1px rgba(0, 0, 0, 0.3), 0 0 22px ${COLORS.primaryGlow}`
       : "0 0 0 1px rgba(0, 0, 0, 0.25)",
-    minHeight: 124,
+    minHeight: "clamp(96px, 14vh, 124px)",
   };
   return (
     <div style={cardStyle}>
@@ -446,12 +462,12 @@ function ChallengerCard({
           ...pixelBorder(highlight ? COLORS.primary : COLORS.borderSubtle, 1),
           padding: "2px 6px",
           fontFamily: FONTS.display,
-          fontSize: 8,
+          fontSize: 9,
           letterSpacing: "0.14em",
           lineHeight: 1.2,
         }}
       >
-        {isPlaceholder ? `#${rank}` : `${entry.score}`}
+        #{rank}
       </div>
       <div style={{ fontSize: 30, lineHeight: "30px" }} aria-hidden="true">
         {entry.emoji}
@@ -459,7 +475,7 @@ function ChallengerCard({
       <div
         style={{
           fontFamily: FONTS.display,
-          fontSize: 8,
+          fontSize: 9,
           letterSpacing: "0.14em",
           textAlign: "center",
           color: COLORS.text,
@@ -479,7 +495,7 @@ function ChallengerCard({
           letterSpacing: "0.06em",
         }}
       >
-        {isPlaceholder ? "???" : `${t("hud.floorLabel")} ${entry.floor}`}
+        🏆 {entry.score} · {t("hud.floorLabel")} {entry.floor}
       </div>
     </div>
   );
@@ -497,7 +513,6 @@ function MenuFooter({
   return (
     <div
       style={{
-        marginTop: 14,
         display: "flex",
         gap: 8,
         flexWrap: "wrap",

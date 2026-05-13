@@ -106,6 +106,16 @@
       }
 
       /* Responsive layout classes used by TitleScreen */
+      .dap-title-root {
+        height: 100%;
+        width: 100%;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+        gap: clamp(10px, 2.2vh, 18px);
+        padding: clamp(10px, 2.2vh, 14px) clamp(14px, 4vw, 56px) clamp(12px, 2.6vh, 22px);
+        box-sizing: border-box;
+        overflow: hidden;
+      }
       .dap-title-topbar {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -117,7 +127,7 @@
         grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
         gap: clamp(20px, 4vw, 48px);
         align-items: start;
-        margin-top: 22px;
+        min-height: 0;
       }
       .dap-challenger-strip {
         display: grid;
@@ -128,7 +138,6 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-top: 18px;
         gap: 12px;
         flex-wrap: wrap;
       }
@@ -137,11 +146,13 @@
         flex-wrap: wrap;
         gap: 18px;
         align-items: center;
-        margin-top: 22px;
       }
 
       /* Mobile */
       @media (max-width: 720px) {
+        .dap-title-root {
+          overflow-y: auto;
+        }
         .dap-title-topbar {
           grid-template-columns: 1fr;
           justify-items: center;

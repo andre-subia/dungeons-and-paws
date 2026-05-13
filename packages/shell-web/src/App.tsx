@@ -330,8 +330,9 @@ export function App() {
   const [legalMoveOpacity, setLegalMoveOpacity] = useState(readLegalMoveOpacity);
   const [playerId] = useState(readOrCreatePlayerId);
   const [playerName, setPlayerName] = useState(() => readPlayerName() || DEFAULT_PLAYER_NAME);
-  const [namePromptOpen, setNamePromptOpen] = useState(() => !readPlayerName());
+  const [namePromptOpen, setNamePromptOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(() => readPlayerName());
+  const [pendingStartAfterName, setPendingStartAfterName] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -345,10 +346,6 @@ export function App() {
   const turn = useRunStore((s) => s.state.turn);
   const reset = useRunStore((s) => s.reset);
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
-
-  useEffect(() => {
-    if (playerName.trim() === "") setNamePromptOpen(true);
-  }, [playerName]);
 
   const refreshLeaderboard = useCallback(async () => {
     if (!hasLeaderboardBackend()) return;
@@ -394,6 +391,16 @@ export function App() {
     }
     setScreen("playing");
   }, [outcome, reset]);
+
+  const startRunWithRequiredName = useCallback(() => {
+    if (playerName.trim() === "") {
+      setPendingStartAfterName(true);
+      setNamePromptOpen(true);
+      return;
+    }
+    setPendingStartAfterName(false);
+    startRun();
+  }, [playerName, startRun]);
 
   const tryAgain = useCallback(() => {
     reset(newSeed());
@@ -826,13 +833,18 @@ export function App() {
 
   function savePlayerName(raw: string) {
     const cleaned = raw.trim().slice(0, 18);
-    const finalName = cleaned === "" ? "Player" : cleaned;
+    if (cleaned === "") return;
+    const finalName = cleaned;
     setPlayerName(finalName);
     setNameDraft(finalName);
     try {
       localStorage.setItem(PLAYER_NAME_STORAGE_KEY, finalName);
     } catch {}
     setNamePromptOpen(false);
+    if (pendingStartAfterName) {
+      setPendingStartAfterName(false);
+      startRun();
+    }
   }
 
   function resetSettings() {
@@ -940,7 +952,7 @@ export function App() {
           playerName={playerName}
           topRuns={topRunsForCards}
           canContinue={canContinue}
-          onStart={startRun}
+          onStart={startRunWithRequiredName}
           onOpenHelp={openHelp}
           onOpenSettings={openSettings}
           onOpenLeaderboard={openLeaderboard}
@@ -1472,6 +1484,7 @@ function NamePromptModal({
   onClose: () => void;
   onSave: (v: string) => void;
 }) {
+  const canSave = draft.trim() !== "";
   return (
     <ModalShell title={t("namePrompt.title")} onClose={onClose} width="min(420px, 100%)">
       <div style={{ display: "grid", gap: 12 }}>
@@ -1481,7 +1494,7 @@ function NamePromptModal({
           placeholder={t("namePrompt.placeholder")}
           autoFocus
           onKeyDown={(e) => {
-            if (e.key === "Enter") onSave(draft);
+            if (e.key === "Enter" && canSave) onSave(draft);
           }}
           style={{
             width: "100%",
@@ -1494,8 +1507,22 @@ function NamePromptModal({
             boxSizing: "border-box",
           }}
         />
+        {!canSave && (
+          <div
+            role="status"
+            style={{
+              color: COLORS.death,
+              fontFamily: FONTS.display,
+              fontSize: 9,
+              letterSpacing: "0.16em",
+            }}
+          >
+            {t("namePrompt.required")}
+          </div>
+        )}
         <button
           onClick={() => onSave(draft)}
+          disabled={!canSave}
           style={{ ...pixelButtonPrimary, fontSize: 11 }}
         >
           ♥ {t("namePrompt.save")}
