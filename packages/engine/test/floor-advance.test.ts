@@ -21,7 +21,9 @@ describe("floor advance + win", () => {
   it("generateFloor produces a floor with heroStart, exitCell and an exit tile", () => {
     const f = generateFloor("ADV-01", 0, PUZZLE_GRID);
     expect(f.index).toBe(0);
-    expect(f.heroStart).toEqual({ x: 0, y: PUZZLE_GRID.height - 1 });
+    // Hero is inset 1 cell from the bottom-left so the initial 3×3 viewport
+    // contains 9 real cells (no void at game start).
+    expect(f.heroStart).toEqual({ x: 1, y: PUZZLE_GRID.height - 2 });
     expect(f.exitCell).not.toEqual(f.heroStart);
     expect(f.grid.get(f.exitCell).kind).toBe("exit");
   });

@@ -10,7 +10,7 @@ import type { Cell } from "../core/types.js";
 import type { HeroState } from "../entities/hero.js";
 import type { EnemyState } from "../entities/enemy.js";
 import { SMALL_GRID, type GridDimensions } from "../world/grid.js";
-import { generateFloor } from "../generation/floor.js";
+import { generateFloor, gridDimsForFloor } from "../generation/floor.js";
 import { type LatticeSnapshot } from "../world/lattice.js";
 import { spawnHero, WANDERER_TEMPLATE, type HeroTemplate } from "../entities/hero.js";
 
@@ -34,6 +34,9 @@ export type FloorState = {
   readonly exitRequiresKey: boolean;
   readonly keyEnemyId: string | null;
   readonly turn: number;
+  /** Cells the player has uncovered. Set of "x,y" keys. Persists across the
+   *  whole floor; never shrinks until the floor is replaced. */
+  readonly explored: ReadonlySet<string>;
 };
 
 export type PlayerInput =
@@ -95,7 +98,9 @@ export function makeInitialRunState(init: RunInit): RunState {
     gridDims: init.gridDims ?? init.config?.gridDims ?? DEFAULT_RUN_CONFIG.gridDims,
   };
   const template = init.heroTemplate ?? WANDERER_TEMPLATE;
-  const floor = generateFloor(init.seed, 0, config.gridDims);
+  // Use depth-scaled dims for floor 0 unless the caller explicitly overrode.
+  const floorDims = init.gridDims ?? init.config?.gridDims ?? gridDimsForFloor(0, config.gridDims);
+  const floor = generateFloor(init.seed, 0, floorDims);
   const heroPosition = init.heroSpawn ?? floor.heroStart;
 
   return {

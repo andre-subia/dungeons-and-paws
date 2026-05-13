@@ -37,7 +37,19 @@ export type TileKind =
   | "mimic"
   | "anchor"
   | "portal"
-  | "exit";
+  | "exit"
+  /** Rock/rubble inside the playable region. Impassable, not a lattice slot. */
+  | "wall"
+  /** Outside the dungeon shape (canvas padding). Impassable, not a lattice slot. */
+  | "void";
+
+/**
+ * Whether a tile blocks hero/enemy movement and counts toward lattice
+ * eligibility. `wall` and `void` are impassable and do NOT count.
+ */
+export function isPassableKind(kind: TileKind): boolean {
+  return kind !== "wall" && kind !== "void";
+}
 
 export type TilePayload =
   | { readonly kind: "enemy"; readonly enemyId: string }

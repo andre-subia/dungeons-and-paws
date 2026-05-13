@@ -13,8 +13,13 @@
  * Cheap (27 sets of ≤9 entries) and avoids subscription bookkeeping.
  */
 
-import { RUNE_COUNT, type LatticeId, type LatticeKind, type Rune } from "../core/types.js";
+import { RUNE_COUNT, isPassableKind, type LatticeId, type LatticeKind, type Rune } from "../core/types.js";
 import { Grid } from "./grid.js";
+
+/** Below this many passable cells, a lattice is considered INERT — it can't
+ *  charge, isn't shown in the HUD, and doesn't gate anything. Tunable per
+ *  lattice kind (chambers need slightly more headroom than rows/columns). */
+const MIN_ELIGIBLE = { row: 3, column: 3, chamber: 4 } as const;
 
 export type LatticeState = {
   readonly id: LatticeId;
@@ -24,6 +29,10 @@ export type LatticeState = {
   readonly isCharged: boolean;
   /** Number of unique runes required to charge this lattice. */
   readonly chargeThreshold: number;
+  /** Passable (non-wall, non-void) cell count in this lattice. */
+  readonly eligibleCount: number;
+  /** True when there aren't enough passable cells for a meaningful lattice. */
+  readonly inert: boolean;
   /** Rune that pushed this lattice to its charged state on the latest recompute. */
   readonly keystone: Rune | null;
 };
@@ -99,24 +108,40 @@ function buildLattice(
   previous: LatticeSnapshot,
 ): LatticeState {
   const runesPresent = new Set<Rune>();
+  let eligibleCount = 0;
   for (const t of tiles) {
+    if (!isPassableKind(t.kind as import("../core/types.js").TileKind)) continue;
+    eligibleCount++;
     if (t.kind !== "rune") continue;
     if (t.rune !== null) runesPresent.add(t.rune);
   }
-  const chargeThreshold =
-    kind === "chamber"
-      ? Math.min(Math.max(5, Math.floor(tiles.length / 4)), RUNE_COUNT)
-      : Math.min(tiles.length, RUNE_COUNT);
-  const isCharged = runesPresent.size >= chargeThreshold;
+  const minEligible = MIN_ELIGIBLE[kind];
+  const inert = eligibleCount < minEligible;
+
+  // Threshold scales with eligibility: open lattices need more uniques (up to
+  // RUNE_COUNT-capped formula); tight lattices need only enough to fill them.
+  // Inert lattices keep a sentinel threshold of +∞ so isCharged stays false.
+  let chargeThreshold: number;
+  if (inert) {
+    chargeThreshold = RUNE_COUNT + 1;
+  } else if (kind === "chamber") {
+    chargeThreshold = Math.min(
+      Math.max(minEligible, Math.floor(eligibleCount / 1.5)),
+      eligibleCount,
+      RUNE_COUNT,
+    );
+  } else {
+    chargeThreshold = Math.min(eligibleCount, RUNE_COUNT);
+  }
+
+  const isCharged = !inert && runesPresent.size >= chargeThreshold;
   let keystone: Rune | null = null;
 
   if (isCharged) {
     const prev = previous.byId.get(id);
     if (prev && prev.isCharged) {
-      // Already charged before — preserve prior keystone.
       keystone = prev.keystone;
     } else if (prev) {
-      // Just charged — keystone is the rune absent from prev set.
       for (const r of runesPresent) {
         if (!prev.runesPresent.has(r)) {
           keystone = r;
@@ -124,16 +149,23 @@ function buildLattice(
         }
       }
     } else {
-      // No prior snapshot. Keystone unknown — pick deterministically.
-      // Iteration order on a Set in JS is insertion order, which is
-      // grid traversal order, which is deterministic.
       for (const r of runesPresent) {
         keystone = r;
       }
     }
   }
 
-  return { id, kind, index, runesPresent, chargeThreshold, isCharged, keystone };
+  return {
+    id,
+    kind,
+    index,
+    runesPresent,
+    chargeThreshold,
+    eligibleCount,
+    inert,
+    isCharged,
+    keystone,
+  };
 }
 
 function wasCharged(snap: LatticeSnapshot, id: LatticeId): boolean {

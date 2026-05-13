@@ -16,6 +16,7 @@ export {
   cellKey,
   chebyshev,
   manhattan,
+  isPassableKind,
 } from "./core/types.js";
 export type {
   Cell,
@@ -43,6 +44,9 @@ export {
   exitTile,
   keyTile,
   enemyTile,
+  wallTile,
+  voidTile,
+  viewportCells,
 } from "./world/grid.js";
 export type { GridDimensions } from "./world/grid.js";
 

@@ -17,7 +17,7 @@
  * ABILITY and END_FLOOR remain stubbed; they ship in step 5.
  */
 
-import { chebyshev, cellEq, type Cell } from "../core/types.js";
+import { chebyshev, cellEq, cellKey, isPassableKind, type Cell } from "../core/types.js";
 import type { GameEvent } from "../core/events.js";
 import { newlyDecharged, recomputeLattices } from "../world/lattice.js";
 import { chebyshevPath } from "./path.js";
@@ -28,7 +28,7 @@ import { runEnemyTurn } from "./enemy-turn.js";
 import { generateFloor, gridDimsForFloor } from "../generation/floor.js";
 import type { PlayerInput, RunState } from "../run/state.js";
 import { grantXp } from "../entities/hero.js";
-import { keyTile } from "../world/grid.js";
+import { keyTile, viewportCells } from "../world/grid.js";
 
 export type TurnResult = {
   readonly state: RunState;
@@ -87,7 +87,20 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
   }
 
   const destTile = grid.get(to);
-  if (destTile.anchored) return reject(state, "destination_anchored", undefined, "Destination is anchored");
+  if (!isPassableKind(destTile.kind)) {
+    return reject(
+      state,
+      destTile.kind === "wall" ? "destination_wall" : "destination_void",
+      undefined,
+      destTile.kind === "wall" ? "Destination is rock" : "Destination is outside the dungeon",
+    );
+  }
+  if (destTile.anchored && destTile.kind !== "exit") {
+    // Anchored landmarks (excluding the exit, which is anchored by design)
+    // are non-walkable. Walls/voids are caught above, but keep this for any
+    // future anchored-but-not-impassable tiles.
+    return reject(state, "destination_anchored", undefined, "Destination is anchored");
+  }
   if (destTile.kind === "exit" && !currentFloor.exitUnlocked) {
     return reject(
       state,
@@ -98,6 +111,21 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
   }
 
   const path = chebyshevPath(from, to);
+
+  // Reject paths that traverse a wall/void on the way to the destination.
+  // (Stride > 1 from the Void keystone creates multi-cell paths.)
+  for (let i = 0; i < path.length - 1; i++) {
+    const cell = path[i]!;
+    if (!isPassableKind(grid.get(cell).kind)) {
+      return reject(
+        state,
+        "path_blocked",
+        { x: cell.x, y: cell.y },
+        `Path blocked at (${cell.x},${cell.y})`,
+      );
+    }
+  }
+
   const events: GameEvent[] = [{ type: "TURN_STARTED", turn: state.turn + 1 }];
   let skipEnemyIds: Set<string> | undefined;
 
@@ -168,6 +196,7 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
     };
     if (!cellEq(from, to)) {
       events.push({ type: "HERO_MOVED", from, to, path });
+      nextState = revealAround(nextState, to);
     }
   }
 
@@ -334,4 +363,18 @@ function hasAnyChargedLattice(snap: import("../world/lattice.js").LatticeSnapsho
     if (lat.isCharged) return true;
   }
   return false;
+}
+
+/** Add the 3×3 viewport around `cell` to `currentFloor.explored`. */
+function revealAround(state: RunState, cell: Cell): RunState {
+  const grid = state.currentFloor.grid;
+  const next = new Set(state.currentFloor.explored);
+  for (const c of viewportCells(grid.width, grid.height, cell, 1)) {
+    next.add(cellKey(c));
+  }
+  if (next.size === state.currentFloor.explored.size) return state;
+  return {
+    ...state,
+    currentFloor: { ...state.currentFloor, explored: next },
+  };
 }

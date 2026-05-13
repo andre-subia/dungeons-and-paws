@@ -5,11 +5,14 @@ import { SMALL_GRID } from "../src/world/grid.js";
 import { makeBlankRunState } from "./_helpers.js";
 
 describe("default run config", () => {
-  it("uses SMALL_GRID (3×3)", () => {
+  it("DEFAULT_RUN_CONFIG.gridDims is the SMALL_GRID sentinel (overridden per floor by gridDimsForFloor)", () => {
     expect(DEFAULT_RUN_CONFIG.gridDims).toEqual(SMALL_GRID);
+  });
+
+  it("floor 0 uses the depth-scaled 6×6 starter (moving 3×3 viewport over a larger map)", () => {
     const state = makeInitialRunState({ seed: "DEF-01" });
-    expect(state.currentFloor.grid.width).toBe(3);
-    expect(state.currentFloor.grid.height).toBe(3);
+    expect(state.currentFloor.grid.width).toBe(6);
+    expect(state.currentFloor.grid.height).toBe(6);
   });
 
   it("hero stride is 1", () => {

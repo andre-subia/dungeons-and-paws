@@ -3,6 +3,7 @@ import { xpToNextLevel, type Rune } from "@gridlore/engine";
 import { useRunStore } from "../state/store.js";
 import { subscribeLocaleChange, t, tRune } from "../i18n.js";
 import { useWebHaptics } from "web-haptics/react";
+import { MapSheet } from "./MapSheet.js";
 import {
   COLORS,
   FONTS,
@@ -45,6 +46,7 @@ export function HUD({
   const events = useRunStore((s) => s.lastEvents);
   const lastEvent = pickPrimaryEvent(events);
   const [invOpen, setInvOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const ignoreInvClickRef = useRef(false);
   const bagSwipeRef = useRef<{ pointerId: number; startX: number; startY: number; active: boolean } | null>(null);
 
@@ -283,30 +285,49 @@ export function HUD({
             </div>
           </div>
         </div>
-        <button
-          onClick={onBagClick}
-          onPointerDown={onBagPointerDown}
-          onPointerMove={onBagPointerMove}
-          onPointerUp={onBagPointerUp}
-          onPointerCancel={onBagPointerUp}
-          style={{
-            ...pixelChip,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 12px",
-            fontFamily: FONTS.display,
-            fontSize: 10,
-            letterSpacing: "0.16em",
-            cursor: "pointer",
-            touchAction: "none",
-            marginLeft: 10,
-          }}
-          title={t("inventory.open")}
-        >
-          <span style={{ fontSize: 18, letterSpacing: 0 }}>🎒</span>
-          <span>{t("inventory.title")}</span>
-        </button>
+        <div style={{ display: "flex", gap: 8, marginLeft: 10 }}>
+          <button
+            onClick={() => setMapOpen(true)}
+            style={{
+              ...pixelChip,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 12px",
+              fontFamily: FONTS.display,
+              fontSize: 10,
+              letterSpacing: "0.16em",
+              cursor: "pointer",
+            }}
+            title={t("map.button")}
+          >
+            <span style={{ fontSize: 18, letterSpacing: 0 }}>🗺</span>
+            <span>{t("map.button")}</span>
+          </button>
+          <button
+            onClick={onBagClick}
+            onPointerDown={onBagPointerDown}
+            onPointerMove={onBagPointerMove}
+            onPointerUp={onBagPointerUp}
+            onPointerCancel={onBagPointerUp}
+            style={{
+              ...pixelChip,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 12px",
+              fontFamily: FONTS.display,
+              fontSize: 10,
+              letterSpacing: "0.16em",
+              cursor: "pointer",
+              touchAction: "none",
+            }}
+            title={t("inventory.open")}
+          >
+            <span style={{ fontSize: 18, letterSpacing: 0 }}>🎒</span>
+            <span>{t("inventory.title")}</span>
+          </button>
+        </div>
       </div>
       </div>
 
@@ -330,6 +351,8 @@ export function HUD({
       {invOpen && (
         <InventorySheet hero={hero} gold={meta.gold} onClose={closeInventory} onUsePotion={onUsePotion} />
       )}
+
+      {mapOpen && <MapSheet onClose={() => setMapOpen(false)} />}
     </div>
   );
 }

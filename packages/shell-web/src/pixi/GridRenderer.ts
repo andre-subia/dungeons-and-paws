@@ -39,6 +39,15 @@ const CARD_ASPECT = 9 / 16;
 /** Inner-card margin as a fraction of cell width — controls the gap between
  *  adjacent cards. Smaller = bigger cards, less visible spacing. */
 const CARD_MARGIN_FRAC = 0.038;
+/** Always-visible window around the hero. The renderer sizes cells so that
+ *  this many cells across × down fill the canvas. */
+const VIEWPORT_RADIUS = 1;
+const VIEWPORT_W = VIEWPORT_RADIUS * 2 + 1; // 3
+const VIEWPORT_H = VIEWPORT_RADIUS * 2 + 1; // 3
+/** Camera tween duration. Tactical feel: slow enough that the eye can track
+ *  the moving world without strobing, fast enough to keep input responsive.
+ *  Combined with easeInOutCubic this feels deliberate and calm. */
+const CAMERA_TWEEN_MS = 240;
 const TILE_EMOJI_SCALE = 0.52;
 const HERO_EMOJI_SCALE = 0.52;
 const DEFAULT_ANIM_SPEED = 0.7;
@@ -51,6 +60,15 @@ const BASE_LATTICE_POP_MS = 520;
 export class GridRenderer {
   private readonly app: Application;
   private readonly board: Container;
+  /** Hard 3×3 mask applied to `board`. Cells outside the viewport (the 5×5
+   *  culling halo, plus the row/column that briefly slides during a tween)
+   *  are clipped invisible. This is what locks the visible board to exactly
+   *  9 cells at all times — no peeking, no partial edges. */
+  private readonly viewportMask: Graphics;
+  /** All world-coord layers (cells/tiles/highlights/anim) — moves under the
+   *  hero during a camera tween. heroLayer is NOT in here so the hero stays
+   *  visually centered while the dungeon slides. */
+  private readonly worldGroup: Container;
   private readonly cellLayer: Container;
   private readonly tileLayer: Container;
   private readonly highlightLayer: Container;
@@ -71,12 +89,14 @@ export class GridRenderer {
     readonly update: (t: number) => void;
   }[] = [];
 
-  // Hero tween (smooth movement) — heroLayer.position is shifted from its
-  // base of (0,0) toward the previous cell, then eased back.
-  private heroTweenMs = 0;
-  private heroTweenBaseMs = 0;
-  private heroTweenFromX = 0;
-  private heroTweenFromY = 0;
+  // Camera tween — worldGroup.position shifts so the world appears to slide
+  // under the (always-centered) hero. Starts at (oldHero - newHero) px on
+  // HERO_MOVED and eases back to (0, 0). The previous heroTween is gone:
+  // the hero never moves visually; the world does.
+  private cameraTweenMs = 0;
+  private cameraTweenBaseMs = 0;
+  private cameraTweenFromX = 0;
+  private cameraTweenFromY = 0;
 
   // Board shake (combat impact) — offsets board.position from its layout base.
   private shakeMs = 0;
@@ -90,6 +110,12 @@ export class GridRenderer {
     this.board = new Container();
     this.app.stage.addChild(this.board);
 
+    // Mask must live on the stage to take effect; layout() draws/sizes it.
+    this.viewportMask = new Graphics();
+    this.app.stage.addChild(this.viewportMask);
+    this.board.mask = this.viewportMask;
+
+    this.worldGroup = new Container();
     this.cellLayer = new Container();
     this.dividerLayer = new Container();
     this.highlightLayer = new Container();
@@ -97,17 +123,22 @@ export class GridRenderer {
     this.heroLayer = new Container();
     this.animationLayer = new Container();
 
-    this.board.addChild(this.cellLayer);
-    this.board.addChild(this.dividerLayer);
-    this.board.addChild(this.highlightLayer);
-    this.board.addChild(this.tileLayer);
+    // worldGroup holds everything that lives in world coords and should
+    // slide under the hero during a camera tween. heroLayer sits on board
+    // directly so it stays centered.
+    this.worldGroup.addChild(this.cellLayer);
+    this.worldGroup.addChild(this.dividerLayer);
+    this.worldGroup.addChild(this.highlightLayer);
+    this.worldGroup.addChild(this.tileLayer);
+    this.worldGroup.addChild(this.animationLayer);
+
+    this.board.addChild(this.worldGroup);
     this.board.addChild(this.heroLayer);
-    this.board.addChild(this.animationLayer);
 
     this.app.ticker.add((ticker) => {
       const dtMs = (ticker.deltaMS ?? 16.6667) as number;
       this.stepAnimations(dtMs);
-      this.updateHeroTween(dtMs);
+      this.updateCameraTween(dtMs);
       this.updateShake(dtMs);
     });
   }
@@ -232,9 +263,11 @@ export class GridRenderer {
           break;
         }
         case "HERO_MOVED": {
+          // World tween: shift cell layer by (oldHero - newHero) px so the
+          // old cells visually sit where they were, then ease back to 0.
           const fromPx = this.cellCenterPx(e.from);
           const toPx = this.cellCenterPx(e.to);
-          this.startHeroTween(fromPx.x - toPx.x, fromPx.y - toPx.y, 130);
+          this.startCameraTween(fromPx.x - toPx.x, fromPx.y - toPx.y, CAMERA_TWEEN_MS);
           break;
         }
         case "LATTICE_CHARGED": {
@@ -427,32 +460,34 @@ export class GridRenderer {
     return Math.max(1, Math.round(baseMs / this.animSpeed));
   }
 
-  /** Begin a smooth hero-cell tween from the given pixel offset toward 0. */
-  private startHeroTween(offsetX: number, offsetY: number, baseDurationMs: number): void {
+  /** Begin a camera tween — the world starts shifted by `(offsetX, offsetY)`
+   *  pixels (so old cells visually sit at their old positions) and eases
+   *  back to (0, 0). The hero, rendered on its own layer, stays centered.*/
+  private startCameraTween(offsetX: number, offsetY: number, baseDurationMs: number): void {
     const dur = this.animMs(baseDurationMs);
-    this.heroTweenBaseMs = dur;
-    this.heroTweenMs = dur;
-    this.heroTweenFromX = offsetX;
-    this.heroTweenFromY = offsetY;
-    // Snap heroLayer to the previous cell so the next paint kicks off the
-    // animation immediately (no 1-frame "jump to new cell, then tween back").
-    this.heroLayer.position.set(offsetX, offsetY);
+    this.cameraTweenBaseMs = dur;
+    this.cameraTweenMs = dur;
+    this.cameraTweenFromX = offsetX;
+    this.cameraTweenFromY = offsetY;
+    this.worldGroup.position.set(offsetX, offsetY);
   }
 
-  private updateHeroTween(dtMs: number): void {
-    if (this.heroTweenMs <= 0) return;
-    this.heroTweenMs -= dtMs;
-    if (this.heroTweenMs <= 0) {
-      this.heroLayer.position.set(0, 0);
-      this.heroTweenMs = 0;
+  private updateCameraTween(dtMs: number): void {
+    if (this.cameraTweenMs <= 0) return;
+    this.cameraTweenMs -= dtMs;
+    if (this.cameraTweenMs <= 0) {
+      this.worldGroup.position.set(0, 0);
+      this.cameraTweenMs = 0;
       return;
     }
-    const progress = 1 - this.heroTweenMs / this.heroTweenBaseMs;
-    const eased = easeOutCubic(progress);
+    const progress = 1 - this.cameraTweenMs / this.cameraTweenBaseMs;
+    // easeInOutCubic — slow start, smooth glide, soft landing. Reads as a
+    // calm camera nudge instead of the snappy "shoot-and-settle" of easeOut.
+    const eased = easeInOutCubic(progress);
     const remaining = 1 - eased;
-    this.heroLayer.position.set(
-      this.heroTweenFromX * remaining,
-      this.heroTweenFromY * remaining,
+    this.worldGroup.position.set(
+      this.cameraTweenFromX * remaining,
+      this.cameraTweenFromY * remaining,
     );
   }
 
@@ -574,28 +609,38 @@ export class GridRenderer {
     const h = canvas.clientHeight || canvas.height;
     const availW = Math.max(0, w - BOARD_PADDING * 2);
     const availH = Math.max(0, h - BOARD_PADDING * 2);
-    const gridW = this.currentState.currentFloor.grid.width;
-    const gridH = this.currentState.currentFloor.grid.height;
 
-    // Pick the largest cell width that satisfies both axes.
-    const maxCellW = availW / gridW;
-    const maxCellH = availH / gridH;
+    // Cells are sized so the *viewport* (always 3×3) fills the canvas, not
+    // the full grid. This is what locks the tactical window — the dungeon
+    // can be 6×6 or 12×12; visible cells are always sized for 3×3.
+    const maxCellW = availW / VIEWPORT_W;
+    const maxCellH = availH / VIEWPORT_H;
     const cellW = Math.floor(Math.min(maxCellW, maxCellH * CARD_ASPECT));
     const cellH = Math.floor(cellW / CARD_ASPECT);
     this.cellWidth = cellW;
     this.cellHeight = cellH;
 
-    const boardW = cellW * gridW;
-    const boardH = cellH * gridH;
-    const baseX = Math.round((w - boardW) / 2);
-    const baseY = Math.round((h - boardH) / 2);
+    // Position `board` so the camera cell (= hero) lands at canvas center.
+    const hero = this.currentState.hero.position;
+    const baseX = Math.round(w / 2 - hero.x * cellW - cellW / 2);
+    const baseY = Math.round(h / 2 - hero.y * cellH - cellH / 2);
     this.board.position.set(baseX, baseY);
     this.boardBaseX = baseX;
     this.boardBaseY = baseY;
+
+    // Hard 3×3 mask: only this rectangle paints. Anything outside (the 5×5
+    // culling halo + tween-edge cells) is invisibly clipped, so the player
+    // sees exactly 9 cells at rest and during transitions.
+    const maskW = VIEWPORT_W * cellW;
+    const maskH = VIEWPORT_H * cellH;
+    const maskX = Math.round((w - maskW) / 2);
+    const maskY = Math.round((h - maskH) / 2);
+    this.viewportMask.clear();
+    this.viewportMask.rect(maskX, maskY, maskW, maskH).fill(0xffffff);
     // Cancel any in-flight transient effects whose math depended on old
-    // pixel coords; the hero would otherwise tween toward a stale offset.
-    this.heroTweenMs = 0;
-    this.heroLayer.position.set(0, 0);
+    // pixel coords; the world would otherwise tween toward a stale offset.
+    this.cameraTweenMs = 0;
+    this.worldGroup.position.set(0, 0);
     this.shakeMs = 0;
     this.shakeIntensity = 0;
   }
@@ -616,97 +661,140 @@ export class GridRenderer {
     const grid = state.currentFloor.grid;
     this.cellLayer.removeChildren();
     const exitUnlocked = state.currentFloor.exitUnlocked;
-    const { cardW, cardH, marginX, marginY } = this.cardDims();
 
-    for (let y = 0; y < grid.height; y++) {
-      for (let x = 0; x < grid.width; x++) {
-        const tile = grid.get({ x, y });
-        const isExit = tile.kind === "exit";
-        const isEnemy = tile.kind === "enemy";
-        const isHero = cellEq({ x, y }, state.hero.position);
-        const fill = isHero
-          ? COLORS.heroCardFill
-          : isEnemy
-            ? COLORS.enemyCardFill
-            : isExit
-              ? exitUnlocked
-                ? COLORS.exitFill
-                : COLORS.exitLockedFill
-              : COLORS.cellEmpty;
-
-        const cardX = x * this.cellWidth + marginX;
-        const cardY = y * this.cellHeight + marginY;
-
-        // Stone-tile look: translucent dark fill so the temple bg shows
-        // through, copper hairline border, lighter top bevel + darker bottom
-        // bevel + faint right shadow. Only hero/exit cards get a colored
-        // outer frame — enemies are marked by the heart+HP corner indicator
-        // drawn later. Charged-lattice cells get a cyan tint overlay.
-        const bevelStrip = Math.max(1, Math.floor(cardH * 0.06));
-        const sideStrip = Math.max(1, Math.floor(cardW * 0.04));
-        const isSpecial = isHero || isExit;
-        const fillAlpha = isSpecial ? 0.76 : isEnemy ? 0.68 : 0.65;
-
-        const g = new Graphics();
-
-        // Card body as a notched-corner octagon (1-px chamfer per corner)
-        // so the silhouette reads as a pixel-art tile. The temple bg shines
-        // through the four corners.
-        const c = 1;
-        const path: number[] = [
-          cardX + c, cardY,
-          cardX + cardW - c, cardY,
-          cardX + cardW, cardY + c,
-          cardX + cardW, cardY + cardH - c,
-          cardX + cardW - c, cardY + cardH,
-          cardX + c, cardY + cardH,
-          cardX, cardY + cardH - c,
-          cardX, cardY + c,
-        ];
-        g.poly(path).fill({ color: fill, alpha: fillAlpha });
-
-        // Bevel — lighter top, darker bottom, faint right-edge shadow.
-        g.rect(cardX + c, cardY, cardW - c * 2, bevelStrip).fill({
-          color: COLORS.cardBevelHighlight,
-          alpha: 0.6,
-        });
-        g.rect(cardX + c, cardY + cardH - bevelStrip, cardW - c * 2, bevelStrip).fill({
-          color: COLORS.cardBevelShadow,
-          alpha: 0.7,
-        });
-        g.rect(
-          cardX + cardW - sideStrip,
-          cardY + bevelStrip,
-          sideStrip,
-          cardH - bevelStrip * 2,
-        ).fill({ color: COLORS.cardBevelShadow, alpha: 0.3 });
-
-        // Hero-only ceremonial inner hairline — reads as a decorated tile
-        // rather than a heavy border. The legal-move stroke (drawn on a
-        // separate layer) remains the only other active outline.
-        if (isHero) {
-          const innerInset = 2//Math.max(2, Math.floor(Math.min(cardW, cardH) * 0.08));
-          g.rect(
-            cardX + 2,
-            cardY + 2,
-            cardW - innerInset * 2,
-            cardH - innerInset * 2,
-          ).stroke({
-            color: COLORS.heroOutline,
-            width: 2,
-            alpha: 0.9,
-          });
+    // Iterate the FULL 5×5 around the hero, *including* out-of-bounds
+    // positions. Cells beyond the world edge render as void/abyss so the
+    // visible 3×3 viewport stays exactly 9 cells whether the hero is in
+    // the open dungeon or pinned in a corner. We deliberately don't use
+    // engine viewportCells here — that helper clamps to the grid, which
+    // is the correct behaviour for fog-of-war but the wrong one here.
+    const VR = 2;
+    const hx = state.hero.position.x;
+    const hy = state.hero.position.y;
+    for (let dy = -VR; dy <= VR; dy++) {
+      for (let dx = -VR; dx <= VR; dx++) {
+        const c: Cell = { x: hx + dx, y: hy + dy };
+        const inBounds = c.x >= 0 && c.x < grid.width && c.y >= 0 && c.y < grid.height;
+        if (!inBounds) {
+          this.renderVoidCell(c);
+          continue;
         }
-
-        g.eventMode = "static";
-        g.cursor = isExit && !exitUnlocked ? "not-allowed" : "pointer";
-        g.on("pointertap", (e: FederatedPointerEvent) => {
-          e.stopPropagation();
-          this.moveHandler({ x, y });
-        });
-        this.cellLayer.addChild(g);
+        const tile = grid.get(c);
+        if (tile.kind === "void") {
+          this.renderVoidCell(c);
+          continue;
+        }
+        if (tile.kind === "wall") {
+          this.renderWallCell(c);
+          continue;
+        }
+        this.renderFloorCell(c, tile, exitUnlocked, state);
       }
     }
+  }
+
+  /** Standard floor / rune / enemy / exit / hero cell. */
+  private renderFloorCell(c: Cell, tile: Tile, exitUnlocked: boolean, state: RunState): void {
+    const { cardW, cardH, marginX, marginY } = this.cardDims();
+    const isExit = tile.kind === "exit";
+    const isEnemy = tile.kind === "enemy";
+    const isHero = cellEq(c, state.hero.position);
+    const fill = isHero
+      ? COLORS.heroCardFill
+      : isEnemy
+        ? COLORS.enemyCardFill
+        : isExit
+          ? (exitUnlocked ? COLORS.exitFill : COLORS.exitLockedFill)
+          : COLORS.cellEmpty;
+
+    const cardX = c.x * this.cellWidth + marginX;
+    const cardY = c.y * this.cellHeight + marginY;
+    const bevelStrip = Math.max(1, Math.floor(cardH * 0.06));
+    const sideStrip = Math.max(1, Math.floor(cardW * 0.04));
+    const isSpecial = isHero || isExit;
+    const fillAlpha = isSpecial ? 0.76 : isEnemy ? 0.68 : 0.65;
+
+    const g = new Graphics();
+    const corner = 1;
+    const path: number[] = [
+      cardX + corner, cardY,
+      cardX + cardW - corner, cardY,
+      cardX + cardW, cardY + corner,
+      cardX + cardW, cardY + cardH - corner,
+      cardX + cardW - corner, cardY + cardH,
+      cardX + corner, cardY + cardH,
+      cardX, cardY + cardH - corner,
+      cardX, cardY + corner,
+    ];
+    g.poly(path).fill({ color: fill, alpha: fillAlpha });
+
+    g.rect(cardX + corner, cardY, cardW - corner * 2, bevelStrip).fill({
+      color: COLORS.cardBevelHighlight,
+      alpha: 0.6,
+    });
+    g.rect(cardX + corner, cardY + cardH - bevelStrip, cardW - corner * 2, bevelStrip).fill({
+      color: COLORS.cardBevelShadow,
+      alpha: 0.7,
+    });
+    g.rect(
+      cardX + cardW - sideStrip,
+      cardY + bevelStrip,
+      sideStrip,
+      cardH - bevelStrip * 2,
+    ).fill({ color: COLORS.cardBevelShadow, alpha: 0.3 });
+
+    if (isHero) {
+      const inset = 2;
+      g.rect(cardX + inset, cardY + inset, cardW - inset * 2, cardH - inset * 2).stroke({
+        color: COLORS.heroOutline,
+        width: 2,
+        alpha: 0.9,
+      });
+    }
+
+    g.eventMode = "static";
+    g.cursor = isExit && !exitUnlocked ? "not-allowed" : "pointer";
+    g.on("pointertap", (e: FederatedPointerEvent) => {
+      e.stopPropagation();
+      this.moveHandler({ x: c.x, y: c.y });
+    });
+    this.cellLayer.addChild(g);
+  }
+
+  /** Solid rock obstacle inside the dungeon. Distinct from void — feels
+   *  like a chunk of cave wall blocking your way, not the absence of map. */
+  private renderWallCell(c: Cell): void {
+    const { cardW, cardH, marginX, marginY } = this.cardDims();
+    const cardX = c.x * this.cellWidth + marginX;
+    const cardY = c.y * this.cellHeight + marginY;
+    const g = new Graphics();
+    // Warm dark stone, slightly darker top so the rock reads as catching
+    // top-light from somewhere above. Translucent so the temple bg shows
+    // a hint through — keeps continuity with the rest of the world.
+    g.rect(cardX, cardY, cardW, cardH).fill({ color: 0x3a2c1d, alpha: 0.92 });
+    g.rect(cardX, cardY, cardW, Math.max(2, Math.floor(cardH * 0.08))).fill({
+      color: 0x5a4a2a,
+      alpha: 0.55,
+    });
+    // Subtle crack hint — a single dark line down the middle, low alpha.
+    const crackX = Math.floor(cardX + cardW * (0.4 + (c.x + c.y) % 2 ? 0.18 : 0));
+    g.rect(crackX, cardY + cardH * 0.18, 1, cardH * 0.55).fill({
+      color: 0x000000,
+      alpha: 0.35,
+    });
+    g.eventMode = "none";
+    this.cellLayer.addChild(g);
+  }
+
+  /** Outside-the-dungeon padding. Pure abyss; no interactivity. */
+  private renderVoidCell(c: Cell): void {
+    const { cardW, cardH, marginX, marginY } = this.cardDims();
+    const cardX = c.x * this.cellWidth + marginX;
+    const cardY = c.y * this.cellHeight + marginY;
+    const g = new Graphics();
+    g.rect(cardX, cardY, cardW, cardH).fill({ color: 0x06070b, alpha: 0.92 });
+    g.eventMode = "none";
+    this.cellLayer.addChild(g);
   }
 
   private drawDividers(): void {
@@ -719,12 +807,27 @@ export class GridRenderer {
     const grid = state.currentFloor.grid;
     this.tileLayer.removeChildren();
 
-    for (const { cell, tile } of grid.each()) {
+    // Same 5×5 sweep as drawCells, but tile content (rune emojis, enemy
+    // sprites, etc.) only paints for in-bounds cells.
+    const VR = 2;
+    const hx = state.hero.position.x;
+    const hy = state.hero.position.y;
+    const cells: Cell[] = [];
+    for (let dy = -VR; dy <= VR; dy++) {
+      for (let dx = -VR; dx <= VR; dx++) {
+        const c: Cell = { x: hx + dx, y: hy + dy };
+        if (c.x < 0 || c.x >= grid.width || c.y < 0 || c.y >= grid.height) continue;
+        cells.push(c);
+      }
+    }
+    for (const cell of cells) {
+      const tile = grid.get(cell);
       const cx = cell.x * this.cellWidth + this.cellWidth / 2;
       const cy = cell.y * this.cellHeight + this.cellHeight / 2;
       this.drawTileBase(tile, cx, cy, state);
     }
-    for (const { cell, tile } of grid.each()) {
+    for (const cell of cells) {
+      const tile = grid.get(cell);
       const cx = cell.x * this.cellWidth + this.cellWidth / 2;
       const cy = cell.y * this.cellHeight + this.cellHeight / 2;
       this.drawTileOverlay(tile, cx, cy, state);
@@ -1010,6 +1113,10 @@ function lerp(a: number, b: number, t: number): number {
 function easeOutCubic(t: number): number {
   const u = 1 - t;
   return 1 - u * u * u;
+}
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 function clamp(n: number, min: number, max: number): number {

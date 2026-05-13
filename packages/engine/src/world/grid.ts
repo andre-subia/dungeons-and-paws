@@ -202,6 +202,36 @@ export function emptyTile(id: string): Tile {
   return { id, kind: "empty", rune: null, hidden: false, anchored: false };
 }
 
+/** Cells inside a (2·radius + 1)² viewport around `center`, clamped to grid
+ *  bounds. Used for fog-of-war reveal and renderer culling. */
+export function viewportCells(
+  width: number,
+  height: number,
+  center: Cell,
+  radius: number = 1,
+): Cell[] {
+  const out: Cell[] = [];
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const x = center.x + dx;
+      const y = center.y + dy;
+      if (x < 0 || x >= width || y < 0 || y >= height) continue;
+      out.push({ x, y });
+    }
+  }
+  return out;
+}
+
+/** Impassable rock/rubble inside the playable region. */
+export function wallTile(id: string): Tile {
+  return { id, kind: "wall", rune: null, hidden: false, anchored: true };
+}
+
+/** Outside-the-dungeon padding cell. Impassable; visually distinct from wall. */
+export function voidTile(id: string): Tile {
+  return { id, kind: "void", rune: null, hidden: false, anchored: true };
+}
+
 /** Convenience: a fresh rune tile. */
 export function runeTile(id: string, rune: Rune): Tile {
   return { id, kind: "rune", rune, hidden: false, anchored: false };
