@@ -742,6 +742,13 @@ export class GridRenderer {
         this.addEmoji(RUNE_EMOJI[tile.rune], cx, cy, contentScale * TILE_EMOJI_SCALE);
         return;
       }
+      case "item": {
+        const item = tile.payload && tile.payload.kind === "item" ? tile.payload.item : null;
+        if (!item) return;
+        const emoji = item.kind === "sword" ? "🗡" : "🪄";
+        this.addEmoji(emoji, cx, cy, contentScale * TILE_EMOJI_SCALE);
+        return;
+      }
       case "key": {
         this.addEmoji(KEY_EMOJI, cx, cy, contentScale * TILE_EMOJI_SCALE);
         return;
@@ -940,6 +947,9 @@ export class GridRenderer {
     const cx = hero.position.x * this.cellWidth + this.cellWidth / 2;
     const cy = hero.position.y * this.cellHeight + this.cellHeight / 2;
 
+    const equipped = hero.equippedWeaponId ? hero.items.find((it) => it.id === hero.equippedWeaponId) : undefined;
+    const weaponBonus = equipped?.attackBonus ?? 0;
+
     const emoji = new Text({
       text: HERO_EMOJI,
       style: {
@@ -979,7 +989,7 @@ export class GridRenderer {
     );
     this.addCornerIconValue(
       "⚔",
-      `${hero.attack}`,
+      `${hero.attack + weaponBonus}${weaponBonus > 0 ? `(+${weaponBonus})` : ""}`,
       cx - cardW / 2,
       cy - cardH / 2,
       "left-top",
@@ -987,6 +997,21 @@ export class GridRenderer {
       COLORS.attackStat,
       this.heroLayer,
     );
+
+    if (equipped) {
+      const weaponEmoji = equipped.kind === "sword" ? "🗡" : "🪄";
+      const bonusText = equipped.attackBonus > 0 ? `+${equipped.attackBonus}` : "";
+      this.addCornerIconValue(
+        weaponEmoji,
+        bonusText,
+        cx - cardW / 2,
+        cy + cardH / 2,
+        "left-bottom",
+        contentScale,
+        COLORS.attackStat,
+        this.heroLayer,
+      );
+    }
 
     if (hero.armor > 0) {
       this.addCornerIconValue(

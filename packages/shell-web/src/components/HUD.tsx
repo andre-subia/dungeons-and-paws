@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { xpToNextLevel, type Rune } from "@gridlore/engine";
+import { xpToNextLevel, type ItemKind, type Rune } from "@gridlore/engine";
 import { useRunStore } from "../state/store.js";
 import { subscribeLocaleChange, t, tRune } from "../i18n.js";
 import { useWebHaptics } from "web-haptics/react";
@@ -29,6 +29,17 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function tItemKind(kind: ItemKind): string {
+  switch (kind) {
+    case "sword":
+      return t("inventory.sword");
+    case "staff":
+      return t("inventory.staff");
+    default:
+      return String(kind);
+  }
+}
+
 export function HUD({
   playerName,
   onTryAgain,
@@ -41,6 +52,7 @@ export function HUD({
   const [, bump] = useState(0);
   const state = useRunStore((s) => s.state);
   const usePotion = useRunStore((s) => s.usePotion);
+  const equipWeapon = useRunStore((s) => s.equipWeapon);
   const { trigger } = useWebHaptics();
   const events = useRunStore((s) => s.lastEvents);
   const lastEvent = pickPrimaryEvent(events);
@@ -328,7 +340,13 @@ export function HUD({
       )}
 
       {invOpen && (
-        <InventorySheet hero={hero} gold={meta.gold} onClose={closeInventory} onUsePotion={onUsePotion} />
+        <InventorySheet
+          hero={hero}
+          gold={meta.gold}
+          onClose={closeInventory}
+          onUsePotion={onUsePotion}
+          onEquipWeapon={equipWeapon}
+        />
       )}
     </div>
   );
@@ -367,25 +385,54 @@ function InventorySheet({
   gold,
   onClose,
   onUsePotion,
+  onEquipWeapon,
 }: {
   hero: ReturnType<typeof useRunStore.getState>["state"]["hero"];
   gold: number;
   onClose: () => void;
   onUsePotion: () => void;
+  onEquipWeapon: (itemId: string | null) => boolean;
 }) {
   const canUsePotion = hero.potions > 0 && hero.hp < hero.hpMax;
-  const SLOT_COUNT = 20;
-  const items: Array<{ kind: "leaf" | "potion"; id: string }> = [];
+  const GRID_COLS = 4;
+  const GRID_ROWS = 4;
+  const items: Array<
+    | { kind: "weapon"; id: string }
+    | { kind: "leaf"; id: string }
+    | { kind: "potion"; id: string }
+  > = [];
+  for (const it of hero.items) {
+    if (it.kind === "sword" || it.kind === "staff") items.push({ kind: "weapon", id: it.id });
+  }
   for (let i = 0; i < hero.brambleProgress; i++) items.push({ kind: "leaf", id: `leaf-${i}` });
   for (let i = 0; i < hero.potions; i++) items.push({ kind: "potion", id: `potion-${i}` });
   const [phase, setPhase] = useState<"enter" | "open" | "exit">("enter");
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const swipeCloseRef = useRef<{ pointerId: number; startX: number; startY: number; startScrollTop: number } | null>(null);
+  const [movingItemId, setMovingItemId] = useState<string | null>(null);
+  const BAG_LAYOUT_KEY = "gridlore:bagLayout:v1";
+  const [layout, setLayout] = useState<Record<string, { x: number; y: number }>>(() => {
+    try {
+      const raw = localStorage.getItem(BAG_LAYOUT_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object") return {};
+      return parsed as Record<string, { x: number; y: number }>;
+    } catch {
+      return {};
+    }
+  });
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setPhase("open"));
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(BAG_LAYOUT_KEY, JSON.stringify(layout));
+    } catch {}
+  }, [layout]);
 
   function requestClose() {
     if (phase === "exit") return;
@@ -418,6 +465,110 @@ function InventorySheet({
     const s = swipeCloseRef.current;
     if (!s || s.pointerId !== e.pointerId) return;
     swipeCloseRef.current = null;
+  }
+
+  type Placement = { id: string; kind: "weapon" | "leaf" | "potion"; x: number; y: number; w: number; h: number };
+  const occupied = Array.from({ length: GRID_ROWS }, () => Array.from({ length: GRID_COLS }, () => false));
+  const placements: Placement[] = [];
+
+  function weaponDims(kind: "sword" | "staff"): { w: number; h: number } {
+    if (kind === "sword") return { w: 1, h: 2 };
+    return { w: 2, h: 1 };
+  }
+
+  function itemDims(id: string): { w: number; h: number } | null {
+    if (id.startsWith("leaf-") || id.startsWith("potion-")) return { w: 1, h: 1 };
+    const item = hero.items.find((it) => it.id === id);
+    if (!item || (item.kind !== "sword" && item.kind !== "staff")) return null;
+    return weaponDims(item.kind);
+  }
+
+  function canPlace(x: number, y: number, w: number, h: number): boolean {
+    if (x < 0 || y < 0 || x + w > GRID_COLS || y + h > GRID_ROWS) return false;
+    for (let yy = y; yy < y + h; yy++) {
+      for (let xx = x; xx < x + w; xx++) {
+        if (occupied[yy]![xx]!) return false;
+      }
+    }
+    return true;
+  }
+
+  function place(id: string, kind: Placement["kind"], x: number, y: number, w: number, h: number) {
+    for (let yy = y; yy < y + h; yy++) {
+      for (let xx = x; xx < x + w; xx++) occupied[yy]![xx] = true;
+    }
+    placements.push({ id, kind, x, y, w, h });
+  }
+
+  function firstFit(w: number, h: number): { x: number; y: number } | null {
+    for (let y = 0; y < GRID_ROWS; y++) {
+      for (let x = 0; x < GRID_COLS; x++) {
+        if (canPlace(x, y, w, h)) return { x, y };
+      }
+    }
+    return null;
+  }
+
+  const nextLayout: Record<string, { x: number; y: number }> = {};
+  for (const it of items) {
+    const dims = itemDims(it.id);
+    if (!dims) continue;
+    const preferred = layout[it.id];
+    if (preferred && canPlace(preferred.x, preferred.y, dims.w, dims.h)) {
+      nextLayout[it.id] = preferred;
+      place(it.id, it.kind, preferred.x, preferred.y, dims.w, dims.h);
+      continue;
+    }
+    const spot = firstFit(dims.w, dims.h);
+    if (!spot) continue;
+    nextLayout[it.id] = spot;
+    place(it.id, it.kind, spot.x, spot.y, dims.w, dims.h);
+  }
+
+  function layoutsEqual(
+    a: Record<string, { x: number; y: number }>,
+    b: Record<string, { x: number; y: number }>,
+  ): boolean {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    if (aKeys.length !== bKeys.length) return false;
+    for (const k of aKeys) {
+      const av = a[k];
+      if (av === undefined) return false;
+      const bv = b[k];
+      if (bv === undefined) return false;
+      if (av.x !== bv.x || av.y !== bv.y) return false;
+    }
+    return true;
+  }
+
+  useEffect(() => {
+    if (!layoutsEqual(layout, nextLayout)) setLayout(nextLayout);
+  }, [hero.items, hero.brambleProgress, hero.potions]);
+
+  function requestMoveToCell(x: number, y: number) {
+    const id = movingItemId;
+    if (!id) return;
+    const dims = itemDims(id);
+    if (!dims) return;
+
+    const current = placements.find((p) => p.id === id);
+    const tmpOccupied = Array.from({ length: GRID_ROWS }, (_, yy) =>
+      Array.from({ length: GRID_COLS }, (_, xx) => occupied[yy]![xx]!),
+    );
+    if (current) {
+      for (let yy = current.y; yy < current.y + current.h; yy++) {
+        for (let xx = current.x; xx < current.x + current.w; xx++) tmpOccupied[yy]![xx] = false;
+      }
+    }
+    if (x < 0 || y < 0 || x + dims.w > GRID_COLS || y + dims.h > GRID_ROWS) return;
+    for (let yy = y; yy < y + dims.h; yy++) {
+      for (let xx = x; xx < x + dims.w; xx++) {
+        if (tmpOccupied[yy]![xx]!) return;
+      }
+    }
+    setLayout((prev) => ({ ...prev, [id]: { x, y } }));
+    setMovingItemId(null);
   }
 
   return (
@@ -511,26 +662,72 @@ function InventorySheet({
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gap: 8,
+            gridTemplateRows: "repeat(4, minmax(0, 1fr))",
+            gap: 0,
           }}
         >
-          {items.slice(0, SLOT_COUNT).map((it) =>
-            it.kind === "leaf" ? (
-              <InventorySlotItem key={it.id} icon="🌿" label={t("inventory.leaf")} />
-            ) : (
+          {Array.from({ length: GRID_ROWS }).flatMap((_, y) =>
+            Array.from({ length: GRID_COLS }).map((_, x) => (
+              <InventorySlotEmpty
+                key={`cell-${x}-${y}`}
+                onClick={movingItemId ? () => requestMoveToCell(x, y) : undefined}
+                highlighted={movingItemId !== null}
+                x={x}
+                y={y}
+              />
+            )),
+          )}
+          {placements.map((p) => {
+            if (p.kind === "weapon") {
+              const item = hero.items.find((it) => it.id === p.id);
+              if (!item) return null;
+              const equipped = hero.equippedWeaponId === p.id;
+              return (
+                <InventorySlotWeapon
+                  key={`weapon-${p.id}`}
+                  item={item}
+                  equipped={equipped}
+                  moving={movingItemId === p.id}
+                  moveModeActive={movingItemId !== null}
+                  onStartMove={() => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
+                  onToggleEquip={() => onEquipWeapon(equipped ? null : p.id)}
+                  x={p.x}
+                  y={p.y}
+                  w={p.w}
+                  h={p.h}
+                />
+              );
+            }
+            if (p.kind === "leaf") {
+              return (
+                <InventorySlotItem
+                  key={p.id}
+                  icon="🌿"
+                  label={t("inventory.leaf")}
+                  moving={movingItemId === p.id}
+                  moveModeActive={movingItemId !== null}
+                  onStartMove={() => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
+                  x={p.x}
+                  y={p.y}
+                />
+              );
+            }
+            return (
               <InventorySlotPotion
-                key={it.id}
+                key={p.id}
                 onClick={onUsePotion}
                 disabled={!canUsePotion}
                 highlight={canUsePotion}
                 label={t("inventory.potion")}
                 tooltip={t("inventory.potionHint", { potions: hero.potions })}
+                moving={movingItemId === p.id}
+                moveModeActive={movingItemId !== null}
+                onStartMove={() => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
+                x={p.x}
+                y={p.y}
               />
-            ),
-          )}
-          {Array.from({ length: Math.max(0, SLOT_COUNT - items.length) }).map((_, i) => (
-            <InventorySlotEmpty key={`empty-${i}`} />
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -540,22 +737,178 @@ function InventorySheet({
 function inventorySlotBaseStyle(): React.CSSProperties {
   return {
     display: "grid",
-    gap: 6,
+    gap: 4,
     placeItems: "center",
     ...pixelBorder(COLORS.borderDim, 1),
-    padding: "10px 8px",
+    padding: 0,
     background: "rgba(8, 5, 3, 0.32)",
-    minHeight: 78,
+    minHeight: 74,
     boxSizing: "border-box",
   };
 }
 
-function InventorySlotItem({ icon, label }: { icon: string; label: string }) {
+function InventorySlotItem({
+  icon,
+  label,
+  moving,
+  moveModeActive,
+  onStartMove,
+  x,
+  y,
+}: {
+  icon: string;
+  label: string;
+  moving: boolean;
+  moveModeActive: boolean;
+  onStartMove: () => void;
+  x: number;
+  y: number;
+}) {
+  const longPressRef = useRef<number | null>(null);
+  const ignoreClickRef = useRef(false);
   return (
-    <div style={inventorySlotBaseStyle()}>
+    <button
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onStartMove();
+      }}
+      onPointerDown={(e) => {
+        if (e.pointerType === "mouse") return;
+        ignoreClickRef.current = false;
+        if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
+        longPressRef.current = window.setTimeout(() => {
+          ignoreClickRef.current = true;
+          onStartMove();
+        }, 260);
+      }}
+      onPointerUp={() => {
+        if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
+        longPressRef.current = null;
+      }}
+      onPointerCancel={() => {
+        if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
+        longPressRef.current = null;
+      }}
+      onClick={() => {
+        if (ignoreClickRef.current) return;
+        if (moveModeActive) onStartMove();
+      }}
+      style={{
+        ...inventorySlotBaseStyle(),
+        background: "transparent",
+        color: COLORS.text,
+        ...pixelBorder(moving ? COLORS.primary : COLORS.borderDim, moving ? 2 : 1),
+        gridColumnStart: x + 1,
+        gridRowStart: y + 1,
+        zIndex: 1,
+        cursor: "pointer",
+        fontFamily: FONTS.body,
+      }}
+      title={label}
+    >
       <div style={{ fontSize: 24, lineHeight: "24px" }}>{icon}</div>
       <div style={{ ...sectionLabel, fontSize: 8 }}>{label}</div>
-    </div>
+    </button>
+  );
+}
+
+function InventorySlotWeapon({
+  item,
+  equipped,
+  moving,
+  moveModeActive,
+  onStartMove,
+  onToggleEquip,
+  x,
+  y,
+  w,
+  h,
+}: {
+  item: ReturnType<typeof useRunStore.getState>["state"]["hero"]["items"][number];
+  equipped: boolean;
+  moving: boolean;
+  moveModeActive: boolean;
+  onStartMove: () => void;
+  onToggleEquip: () => void;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}) {
+  const isSword = item.kind === "sword";
+  const icon = isSword ? "🗡" : "🪄";
+  const label = isSword ? t("inventory.sword") : t("inventory.staff");
+  const bonus = "attackBonus" in item ? item.attackBonus : 0;
+  const durability = "durability" in item ? `${item.durability}/${item.durabilityMax}` : "";
+  const longPressRef = useRef<number | null>(null);
+  const ignoreClickRef = useRef(false);
+  return (
+    <button
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onStartMove();
+      }}
+      onPointerDown={(e) => {
+        if (e.pointerType === "mouse") return;
+        ignoreClickRef.current = false;
+        if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
+        longPressRef.current = window.setTimeout(() => {
+          ignoreClickRef.current = true;
+          onStartMove();
+        }, 260);
+      }}
+      onPointerUp={() => {
+        if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
+        longPressRef.current = null;
+      }}
+      onPointerCancel={() => {
+        if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
+        longPressRef.current = null;
+      }}
+      onClick={() => {
+        if (ignoreClickRef.current) return;
+        if (moveModeActive) onStartMove();
+        else onToggleEquip();
+      }}
+      style={{
+        ...inventorySlotBaseStyle(),
+        background: "rgba(8, 5, 3, 0.92)",
+        color: COLORS.text,
+        ...pixelBorder(moving ? COLORS.primary : equipped ? COLORS.primary : COLORS.borderDim, moving ? 2 : 1),
+        gridColumnStart: x + 1,
+        gridRowStart: y + 1,
+        gridColumnEnd: `span ${w}`,
+        gridRowEnd: `span ${h}`,
+        cursor: "pointer",
+        fontFamily: FONTS.body,
+        position: "relative",
+        zIndex: 2,
+      }}
+      title={label}
+    >
+      <div style={{ fontSize: 24, lineHeight: "24px" }}>{icon}</div>
+      <div style={{ ...sectionLabel, fontSize: 8 }}>{label}</div>
+      <div style={{ fontFamily: FONTS.mono, fontSize: 12, color: COLORS.primary }}>{bonus > 0 ? `+${bonus}` : ""}</div>
+      {durability !== "" && <div style={{ fontFamily: FONTS.mono, fontSize: 11, opacity: 0.9 }}>{durability}</div>}
+      {equipped && (
+        <div
+          style={{
+            position: "absolute",
+            top: 4,
+            right: 4,
+            ...pixelBorder(COLORS.primary, 1),
+            background: "rgba(10, 6, 4, 0.75)",
+            padding: "3px 4px",
+            fontFamily: FONTS.display,
+            fontSize: 7,
+            letterSpacing: "0.14em",
+            color: COLORS.primary,
+          }}
+        >
+          {t("inventory.equipped")}
+        </div>
+      )}
+    </button>
   );
 }
 
@@ -565,24 +918,64 @@ function InventorySlotPotion({
   highlight,
   label,
   tooltip,
+  moving,
+  moveModeActive,
+  onStartMove,
+  x,
+  y,
 }: {
   onClick: () => void;
   disabled: boolean;
   highlight: boolean;
   label: string;
   tooltip: string;
+  moving: boolean;
+  moveModeActive: boolean;
+  onStartMove: () => void;
+  x: number;
+  y: number;
 }) {
+  const longPressRef = useRef<number | null>(null);
+  const ignoreClickRef = useRef(false);
   return (
     <button
-      onClick={onClick}
-      disabled={disabled}
+      aria-disabled={disabled}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onStartMove();
+      }}
+      onPointerDown={(e) => {
+        if (e.pointerType === "mouse") return;
+        ignoreClickRef.current = false;
+        if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
+        longPressRef.current = window.setTimeout(() => {
+          ignoreClickRef.current = true;
+          onStartMove();
+        }, 260);
+      }}
+      onPointerUp={() => {
+        if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
+        longPressRef.current = null;
+      }}
+      onPointerCancel={() => {
+        if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
+        longPressRef.current = null;
+      }}
+      onClick={() => {
+        if (ignoreClickRef.current) return;
+        if (moveModeActive) onStartMove();
+        else if (!disabled) onClick();
+      }}
       style={{
         ...inventorySlotBaseStyle(),
         background: "transparent",
         color: COLORS.text,
-        ...pixelBorder(highlight ? COLORS.primary : COLORS.borderDim, 1),
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.6 : 1,
+        ...pixelBorder(moving ? COLORS.primary : highlight ? COLORS.primary : COLORS.borderDim, moving ? 2 : 1),
+        gridColumnStart: x + 1,
+        gridRowStart: y + 1,
+        zIndex: 1,
+        cursor: disabled && !moveModeActive ? "not-allowed" : "pointer",
+        opacity: disabled && !moveModeActive ? 0.6 : 1,
         fontFamily: FONTS.body,
       }}
       title={tooltip}
@@ -593,14 +986,30 @@ function InventorySlotPotion({
   );
 }
 
-function InventorySlotEmpty() {
+function InventorySlotEmpty({
+  onClick,
+  highlighted,
+  x,
+  y,
+}: {
+  onClick?: () => void;
+  highlighted?: boolean;
+  x: number;
+  y: number;
+}) {
   return (
-    <div
+    <button
       aria-hidden="true"
+      onClick={onClick}
       style={{
         ...inventorySlotBaseStyle(),
         background: "rgba(8, 5, 3, 0.18)",
         opacity: 0.9,
+        gridColumnStart: x + 1,
+        gridRowStart: y + 1,
+        zIndex: 0,
+        cursor: onClick ? "pointer" : "default",
+        ...pixelBorder(highlighted ? COLORS.borderSubtle : COLORS.borderDim, 1),
       }}
     />
   );
@@ -732,6 +1141,14 @@ function pickPrimaryEvent(
 
 function formatEvent(e: NonNullable<ReturnType<typeof useRunStore.getState>["lastEvents"][number]>): string {
   switch (e.type) {
+    case "ITEM_SPAWNED":
+      return t("event.itemSpawned", { item: tItemKind(e.itemKind), x: e.cell.x, y: e.cell.y });
+    case "ITEM_PICKED_UP":
+      return t("event.itemPickedUp", { item: tItemKind(e.itemKind) });
+    case "WEAPON_EQUIPPED":
+      return e.itemKind ? t("event.weaponEquipped", { item: tItemKind(e.itemKind) }) : t("event.weaponUnequipped");
+    case "WEAPON_BROKE":
+      return t("event.weaponBroke", { item: tItemKind(e.itemKind) });
     case "HERO_MOVED":
       return t("event.heroMoved", { x: e.to.x, y: e.to.y });
     case "EXIT_UNLOCKED":

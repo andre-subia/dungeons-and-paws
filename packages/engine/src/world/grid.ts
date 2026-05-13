@@ -9,7 +9,7 @@
  * reference until replaced.
  */
 
-import type { Cell, Tile, Rune } from "../core/types.js";
+import type { Cell, Tile, Rune, ItemInstance } from "../core/types.js";
 
 export type GridDimensions = {
   readonly width: number;
@@ -230,5 +230,16 @@ export function enemyTile(id: string, enemyId: string, _rune: Rune): Tile {
     hidden: false,
     anchored: false,
     payload: { kind: "enemy", enemyId },
+  };
+}
+
+export function itemTile(id: string, item: ItemInstance): Tile {
+  return {
+    id,
+    kind: "item",
+    rune: null,
+    hidden: false,
+    anchored: false,
+    payload: { kind: "item", item },
   };
 }

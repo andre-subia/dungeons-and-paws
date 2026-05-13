@@ -24,11 +24,31 @@ export type Rune = (typeof RUNES)[number];
 
 export const RUNE_COUNT = RUNES.length;
 
+export const ITEM_KINDS = ["sword", "staff"] as const;
+export type ItemKind = (typeof ITEM_KINDS)[number];
+
+export type ItemInstance =
+  | {
+      readonly id: string;
+      readonly kind: "sword";
+      readonly attackBonus: number;
+      readonly durability: number;
+      readonly durabilityMax: number;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "staff";
+      readonly attackBonus: number;
+      readonly durability: number;
+      readonly durabilityMax: number;
+    };
+
 export type TileKind =
   | "empty"
   | "rune"
   | "key"
   | "enemy"
+  | "item"
   | "treasure"
   | "hazard"
   | "door"
@@ -41,6 +61,7 @@ export type TileKind =
 
 export type TilePayload =
   | { readonly kind: "enemy"; readonly enemyId: string }
+  | { readonly kind: "item"; readonly item: ItemInstance }
   | { readonly kind: "treasure"; readonly lootTable: string }
   | { readonly kind: "hazard"; readonly damage: number }
   | { readonly kind: "door"; readonly requiredLatticeKey: string }

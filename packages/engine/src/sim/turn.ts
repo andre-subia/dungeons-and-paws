@@ -23,7 +23,7 @@ import { newlyDecharged, recomputeLattices } from "../world/lattice.js";
 import { chebyshevPath } from "./path.js";
 import { resolveTileAt } from "./resolve.js";
 import { spawnEndOfTurnRune } from "./spawn.js";
-import { resolveCombatAt } from "./combat.js";
+import { resolveCombatAt, resolveCombatAtRanged } from "./combat.js";
 import { runEnemyTurn } from "./enemy-turn.js";
 import { generateFloor, gridDimsForFloor } from "../generation/floor.js";
 import type { PlayerInput, RunState } from "../run/state.js";
@@ -45,6 +45,8 @@ export function applyInput(state: RunState, input: PlayerInput): TurnResult {
       return applyMove(state, input.from, input.to);
     case "USE_POTION":
       return applyUsePotion(state);
+    case "EQUIP_WEAPON":
+      return applyEquipWeapon(state, input.itemId);
     case "ABILITY":
       return reject(state, "ability_unimplemented", undefined, "ABILITY not implemented yet");
     case "END_FLOOR":
@@ -76,8 +78,15 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
     }
   }
 
+  const destTile = grid.get(to);
+  const hasStaffEquipped = hero.equippedWeaponId
+    ? hero.items.some((it) => it.id === hero.equippedWeaponId && it.kind === "staff")
+    : false;
+  const STAFF_RANGE = 3;
   const distance = chebyshev(from, to);
-  if (distance > hero.stride) {
+  const canRangedAttack =
+    hasStaffEquipped && destTile.kind === "enemy" && distance <= STAFF_RANGE && hasClearLine(grid, from, to);
+  if (distance > hero.stride && !canRangedAttack) {
     return reject(
       state,
       "destination_beyond_stride",
@@ -86,7 +95,6 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
     );
   }
 
-  const destTile = grid.get(to);
   if (destTile.anchored) return reject(state, "destination_anchored", undefined, "Destination is anchored");
   if (destTile.kind === "exit" && !currentFloor.exitUnlocked) {
     return reject(
@@ -101,21 +109,23 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
   const events: GameEvent[] = [{ type: "TURN_STARTED", turn: state.turn + 1 }];
   let skipEnemyIds: Set<string> | undefined;
 
-  // 1. Resolve each path cell EXCEPT the destination — destination
-  //    handling is special (exit ends the floor; rune-at-dest is consumed;
-  //    enemy-at-dest triggers combat).
+  // 1. Resolve each path cell EXCEPT the destination — unless this is a ranged
+  //    staff strike, in which case we don't traverse intermediate tiles.
   let nextState: RunState = state;
-  for (let i = 0; i < path.length - 1; i++) {
-    const cell = path[i]!;
-    const result = resolveTileAt(nextState, cell);
-    nextState = result.state;
-    for (const e of result.events) events.push(e);
+  if (!canRangedAttack) {
+    for (let i = 0; i < path.length - 1; i++) {
+      const cell = path[i]!;
+      const result = resolveTileAt(nextState, cell);
+      nextState = result.state;
+      for (const e of result.events) events.push(e);
+    }
   }
 
   // 1b. Destination dispatch.
   const destIsExit = destTile.kind === "exit";
   const destIsEnemy = destTile.kind === "enemy";
   let heroEntersDest = !destIsEnemy; // exit/empty/rune always enter; enemy depends on kill
+  if (canRangedAttack) heroEntersDest = false;
 
   if (destIsEnemy) {
     const destEnemyId =
@@ -126,10 +136,10 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
       !currentFloor.exitUnlocked &&
       currentFloor.keyEnemyId === destEnemyId;
 
-    const combat = resolveCombatAt(nextState, to);
+    const combat = canRangedAttack ? resolveCombatAtRanged(nextState, to) : resolveCombatAt(nextState, to);
     nextState = combat.state;
     for (const e of combat.events) events.push(e);
-    heroEntersDest = combat.enemyKilled;
+    heroEntersDest = canRangedAttack ? false : combat.enemyKilled;
 
     if (combat.enemyKilled && shouldDropKeyHere) {
       if (nextState.currentFloor.grid.get(to).kind !== "key") {
@@ -304,6 +314,42 @@ function applyUsePotion(state: RunState): TurnResult {
   return { state: nextState, events };
 }
 
+function applyEquipWeapon(state: RunState, itemId: string | null): TurnResult {
+  const hero = state.hero;
+  if (itemId === null) {
+    if (hero.equippedWeaponId === null) {
+      return reject(state, "equip_noop", undefined, "Already unequipped");
+    }
+    const nextState: RunState = {
+      ...state,
+      hero: { ...hero, equippedWeaponId: null },
+      inputLog: [...state.inputLog, { type: "EQUIP_WEAPON", itemId: null }],
+    };
+    return { state: nextState, events: [{ type: "WEAPON_EQUIPPED", itemKind: null }] };
+  }
+
+  const item = hero.items.find((it) => it.id === itemId);
+  if (!item) return reject(state, "equip_missing", undefined, "Item not in inventory");
+  if (item.kind !== "sword" && item.kind !== "staff") {
+    return reject(state, "equip_not_weapon", undefined, "Item is not a weapon");
+  }
+  if (hero.equippedWeaponId === itemId) {
+    const nextState: RunState = {
+      ...state,
+      hero: { ...hero, equippedWeaponId: null },
+      inputLog: [...state.inputLog, { type: "EQUIP_WEAPON", itemId: null }],
+    };
+    return { state: nextState, events: [{ type: "WEAPON_EQUIPPED", itemKind: null }] };
+  }
+
+  const nextState: RunState = {
+    ...state,
+    hero: { ...hero, equippedWeaponId: itemId },
+    inputLog: [...state.inputLog, { type: "EQUIP_WEAPON", itemId }],
+  };
+  return { state: nextState, events: [{ type: "WEAPON_EQUIPPED", itemKind: item.kind }] };
+}
+
 function transitionFloor(state: RunState, events: GameEvent[]): RunState {
   const completedIndex = state.currentFloor.index;
   events.push({ type: "FLOOR_COMPLETED", floorIndex: completedIndex });
@@ -334,4 +380,21 @@ function hasAnyChargedLattice(snap: import("../world/lattice.js").LatticeSnapsho
     if (lat.isCharged) return true;
   }
   return false;
+}
+
+function hasClearLine(grid: RunState["currentFloor"]["grid"], from: Cell, to: Cell): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (dx === 0 && dy === 0) return true;
+  if (dx !== 0 && dy !== 0 && Math.abs(dx) !== Math.abs(dy)) return false;
+  const stepX = dx === 0 ? 0 : dx > 0 ? 1 : -1;
+  const stepY = dy === 0 ? 0 : dy > 0 ? 1 : -1;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy));
+  for (let i = 1; i < steps; i++) {
+    const c: Cell = { x: from.x + stepX * i, y: from.y + stepY * i };
+    const tile = grid.get(c);
+    if (tile.anchored) return false;
+    if (tile.kind === "enemy") return false;
+  }
+  return true;
 }

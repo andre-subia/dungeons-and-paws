@@ -12,6 +12,7 @@ export const ENGINE_VERSION = "0.0.0";
 export {
   RUNES,
   RUNE_COUNT,
+  ITEM_KINDS,
   cellEq,
   cellKey,
   chebyshev,
@@ -20,6 +21,8 @@ export {
 export type {
   Cell,
   Rune,
+  ItemKind,
+  ItemInstance,
   Tile,
   TileKind,
   TilePayload,
@@ -43,6 +46,7 @@ export {
   exitTile,
   keyTile,
   enemyTile,
+  itemTile,
 } from "./world/grid.js";
 export type { GridDimensions } from "./world/grid.js";
 
@@ -84,7 +88,7 @@ export { resolveTileAt } from "./sim/resolve.js";
 export type { ResolveResult } from "./sim/resolve.js";
 export { applyKeystone } from "./sim/keystone.js";
 export { spawnEndOfTurnRune } from "./sim/spawn.js";
-export { resolveCombatAt } from "./sim/combat.js";
+export { resolveCombatAt, resolveCombatAtRanged } from "./sim/combat.js";
 export type { CombatResult } from "./sim/combat.js";
 export { runEnemyTurn } from "./sim/enemy-turn.js";
 export type { EnemyTurnResult } from "./sim/enemy-turn.js";

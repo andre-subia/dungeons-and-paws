@@ -18,6 +18,7 @@ import {
   emptyTile,
   enemyTile,
   exitTile,
+  itemTile,
   runeTile,
   type GridDimensions,
 } from "../world/grid.js";
@@ -33,6 +34,7 @@ import {
 } from "../entities/enemy-templates.js";
 
 const RUNE_DENSITY = 0.55;
+const ITEM_SPAWN_CHANCE = 0.55;
 
 export function generateFloor(
   seed: string,
@@ -72,6 +74,8 @@ export function generateFloor(
   grid = enemyPlacement.grid;
   const enemies = enemyPlacement.enemies;
 
+  grid = placeFloorItem(grid, rng, floorIndex, heroStart, exitCell);
+
   const lattices = recomputeLattices(grid);
 
   const exitRequiresKey =
@@ -90,6 +94,49 @@ export function generateFloor(
     keyEnemyId,
     turn: 0,
   };
+}
+
+function placeFloorItem(
+  grid: Grid,
+  rng: SeededRNG,
+  floorIndex: number,
+  heroStart: Cell,
+  exitCell: Cell,
+): Grid {
+  if (floorIndex === 0) return grid;
+  if (rng.next() > ITEM_SPAWN_CHANCE) return grid;
+
+  const emptyCandidates: Cell[] = [];
+  const allCandidates: Cell[] = [];
+  for (const { cell, tile } of grid.each()) {
+    if (cellEq(cell, heroStart)) continue;
+    if (cellEq(cell, exitCell)) continue;
+    allCandidates.push(cell);
+    if (tile.kind === "empty") emptyCandidates.push(cell);
+  }
+  const pool = emptyCandidates.length > 0 ? emptyCandidates : allCandidates;
+  if (pool.length === 0) return grid;
+  const cell = rng.pick(pool);
+
+  const kind = rng.next() < 0.55 ? "sword" : "staff";
+  const item =
+    kind === "sword"
+      ? {
+          id: `it-f${floorIndex}-sword`,
+          kind: "sword" as const,
+          attackBonus: 1,
+          durability: 12,
+          durabilityMax: 12,
+        }
+      : {
+          id: `it-f${floorIndex}-staff`,
+          kind: "staff" as const,
+          attackBonus: 2,
+          durability: 6,
+          durabilityMax: 6,
+        };
+
+  return grid.set(cell, itemTile(`f${floorIndex}-item-${cell.x}-${cell.y}`, item));
 }
 
 /**

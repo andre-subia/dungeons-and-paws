@@ -21,6 +21,8 @@ export type RunStore = {
   move: (to: Cell) => boolean;
   /** Use a health potion. Returns true if accepted. */
   usePotion: () => boolean;
+  /** Equip/unequip a weapon by item id (null to unequip). Returns true if accepted. */
+  equipWeapon: (itemId: string | null) => boolean;
   /** Reset to a fresh run with a new seed. */
   reset: (seed?: string) => void;
 };
@@ -49,6 +51,13 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const { state } = get();
     if (state.outcome !== "in_progress") return false;
     const result = applyInput(state, { type: "USE_POTION" });
+    set({ state: result.state, lastEvents: result.events });
+    return result.state !== state;
+  },
+  equipWeapon(itemId) {
+    const { state } = get();
+    if (state.outcome !== "in_progress") return false;
+    const result = applyInput(state, { type: "EQUIP_WEAPON", itemId });
     set({ state: result.state, lastEvents: result.events });
     return result.state !== state;
   },

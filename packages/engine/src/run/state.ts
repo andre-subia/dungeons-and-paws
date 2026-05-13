@@ -43,6 +43,7 @@ export type PlayerInput =
       readonly to: Cell;
     }
   | { readonly type: "USE_POTION" }
+  | { readonly type: "EQUIP_WEAPON"; readonly itemId: string | null }
   | {
       readonly type: "ABILITY";
       readonly abilityId: string;

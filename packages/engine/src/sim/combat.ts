@@ -30,6 +30,14 @@ export type CombatResult = {
 const HERO_ID = "hero";
 
 export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
+  return resolveCombatInternal(state, cell, true);
+}
+
+export function resolveCombatAtRanged(state: RunState, cell: Cell): CombatResult {
+  return resolveCombatInternal(state, cell, false);
+}
+
+function resolveCombatInternal(state: RunState, cell: Cell, allowRetaliation: boolean): CombatResult {
   const tile = state.currentFloor.grid.get(cell);
   if (tile.kind !== "enemy" || !tile.payload || tile.payload.kind !== "enemy") {
     return { state, events: [], enemyKilled: false };
@@ -74,8 +82,11 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
   const hero = state.hero;
   const meta = state.meta;
 
+  const weapon = hero.equippedWeaponId ? hero.items.find((it) => it.id === hero.equippedWeaponId) : undefined;
+  const weaponBonusAttack = weapon?.attackBonus ?? 0;
+
   // 1. Hero strikes.
-  const damageToEnemy = hero.attack;
+  const damageToEnemy = hero.attack + weaponBonusAttack;
   const enemyHpAfter = Math.max(0, enemy.hp - damageToEnemy);
   events.push({
     type: "DAMAGE_DEALT",
@@ -90,6 +101,24 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
   let nextMeta = meta;
   let nextKeyEnemyId = state.currentFloor.keyEnemyId;
   let killed = false;
+
+  if (weapon && "durability" in weapon) {
+    const nextDur = weapon.durability - 1;
+    if (nextDur <= 0) {
+      nextHero = {
+        ...nextHero,
+        items: nextHero.items.filter((it) => it.id !== weapon.id),
+        equippedWeaponId: null,
+      };
+      events.push({ type: "WEAPON_BROKE", itemKind: weapon.kind });
+      events.push({ type: "WEAPON_EQUIPPED", itemKind: null });
+    } else {
+      nextHero = {
+        ...nextHero,
+        items: nextHero.items.map((it) => (it.id === weapon.id ? { ...weapon, durability: nextDur } : it)),
+      };
+    }
+  }
 
   if (enemyHpAfter <= 0) {
     killed = true;
@@ -128,25 +157,27 @@ export function resolveCombatAt(state: RunState, cell: Cell): CombatResult {
     nextEnemies = map;
     events.push({ type: "ENEMY_DAMAGED", enemyId, cell, hpAfter: enemyHpAfter });
 
-    // 2. Enemy retaliates.
-    const incoming = enemy.attack;
-    const absorbed = Math.min(hero.armor, incoming);
-    const hpDamage = incoming - absorbed;
-    const newArmor = hero.armor - absorbed;
-    const newHp = Math.max(0, hero.hp - hpDamage);
-    nextHero = { ...hero, armor: newArmor, hp: newHp };
-    events.push({
-      type: "DAMAGE_DEALT",
-      source: enemyId,
-      target: HERO_ID,
-      amount: incoming,
-    });
-    events.push({
-      type: "HERO_DAMAGED",
-      amount: hpDamage,
-      absorbed,
-      hpAfter: newHp,
-    });
+    if (allowRetaliation) {
+      // 2. Enemy retaliates.
+      const incoming = enemy.attack;
+      const absorbed = Math.min(hero.armor, incoming);
+      const hpDamage = incoming - absorbed;
+      const newArmor = hero.armor - absorbed;
+      const newHp = Math.max(0, hero.hp - hpDamage);
+      nextHero = { ...nextHero, armor: newArmor, hp: newHp };
+      events.push({
+        type: "DAMAGE_DEALT",
+        source: enemyId,
+        target: HERO_ID,
+        amount: incoming,
+      });
+      events.push({
+        type: "HERO_DAMAGED",
+        amount: hpDamage,
+        absorbed,
+        hpAfter: newHp,
+      });
+    }
   }
 
   return {

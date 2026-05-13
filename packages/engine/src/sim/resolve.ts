@@ -27,6 +27,19 @@ export type ResolveResult = {
 
 export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
   const tile = state.currentFloor.grid.get(cell);
+  if (tile.kind === "item" && tile.payload && tile.payload.kind === "item") {
+    const item = tile.payload.item;
+    const newGrid = state.currentFloor.grid.set(
+      cell,
+      emptyTile(`item-${state.turn}-${cell.x}-${cell.y}`),
+    );
+    const nextHero = { ...state.hero, items: [...state.hero.items, item] };
+    const nextMeta = { ...state.meta, score: state.meta.score + 50 };
+    return {
+      state: { ...state, hero: nextHero, meta: nextMeta, currentFloor: { ...state.currentFloor, grid: newGrid } },
+      events: [{ type: "ITEM_PICKED_UP", cell, itemKind: item.kind }],
+    };
+  }
   if (tile.kind === "key") {
     const newGrid = state.currentFloor.grid.set(
       cell,

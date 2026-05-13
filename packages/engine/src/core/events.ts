@@ -5,7 +5,7 @@
  * onto sprites/audio/haptics. The complete state lives only in RunState.
  */
 
-import type { Cell, EntityId, LatticeId, Rune } from "./types.js";
+import type { Cell, EntityId, ItemKind, LatticeId, Rune } from "./types.js";
 
 export type InputRejectedEvent = {
   readonly type: "INPUT_REJECTED";
@@ -32,6 +32,13 @@ export type KeystoneBonusEffect =
 export type GameEvent =
   | { readonly type: "TURN_STARTED"; readonly turn: number }
   | InputRejectedEvent
+  | { readonly type: "ITEM_SPAWNED"; readonly cell: Cell; readonly itemKind: ItemKind }
+  | { readonly type: "ITEM_PICKED_UP"; readonly cell: Cell; readonly itemKind: ItemKind }
+  | {
+      readonly type: "WEAPON_EQUIPPED";
+      readonly itemKind: ItemKind | null;
+    }
+  | { readonly type: "WEAPON_BROKE"; readonly itemKind: ItemKind }
   | {
       readonly type: "HERO_MOVED";
       readonly from: Cell;

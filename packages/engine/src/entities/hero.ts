@@ -1,4 +1,4 @@
-import type { Cell, Rune } from "../core/types.js";
+import type { Cell, Rune, ItemInstance } from "../core/types.js";
 
 export type HeroState = {
   readonly characterId: string;
@@ -9,6 +9,8 @@ export type HeroState = {
   readonly xp: number;
   readonly potions: number;
   readonly brambleProgress: number;
+  readonly items: readonly ItemInstance[];
+  readonly equippedWeaponId: string | null;
   readonly stride: number;
   readonly attack: number;
   readonly focus: number;
@@ -75,6 +77,8 @@ export function spawnHero(template: HeroTemplate, position: Cell): HeroState {
     xp: 0,
     potions: 2,
     brambleProgress: 0,
+    items: [],
+    equippedWeaponId: null,
     stride: template.stride,
     attack: template.attack,
     focus: template.focusMax,
