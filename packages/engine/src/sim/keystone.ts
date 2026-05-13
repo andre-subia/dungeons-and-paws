@@ -84,20 +84,15 @@ export function applyKeystone(
       break;
     }
     case "bramble": {
-      const canGain = nextHero.potions < nextHero.potionsMax;
-      if (canGain) {
-        nextHero = { ...nextHero, potions: nextHero.potions + 1 };
-        events.push({
-          type: "POTION_GAINED",
-          potions: nextHero.potions,
-          potionsMax: nextHero.potionsMax,
-        });
-      }
+      nextHero = { ...nextHero, potions: nextHero.potions + 1 };
+      events.push({
+        type: "POTION_GAINED",
+        potions: nextHero.potions,
+      });
       effect = {
         kind: "bramble",
-        potionGained: canGain,
+        potionGained: true,
         potions: nextHero.potions,
-        potionsMax: nextHero.potionsMax,
       };
       break;
     }

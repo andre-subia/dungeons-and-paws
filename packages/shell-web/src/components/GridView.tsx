@@ -9,7 +9,15 @@ import type { Cell } from "@gridlore/engine";
  * for size changes (so flex-layout shifts resize the canvas), and
  * dispatches moves via the store when the renderer reports a tap.
  */
-export function GridView({ animSpeed, onMove }: { animSpeed: number; onMove: (cell: Cell) => void }) {
+export function GridView({
+  animSpeed,
+  legalMoveOpacity,
+  onMove,
+}: {
+  animSpeed: number;
+  legalMoveOpacity: number;
+  onMove: (cell: Cell) => void;
+}) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<GridRenderer | null>(null);
 
@@ -29,6 +37,7 @@ export function GridView({ animSpeed, onMove }: { animSpeed: number; onMove: (ce
       renderer = r;
       rendererRef.current = r;
       r.setAnimSpeed(animSpeed);
+      r.setLegalMoveOpacity(legalMoveOpacity);
       r.setMoveHandler(onMove);
       const snap = useRunStore.getState();
       r.render(snap.state, snap.lastEvents);
@@ -61,6 +70,10 @@ export function GridView({ animSpeed, onMove }: { animSpeed: number; onMove: (ce
   useEffect(() => {
     rendererRef.current?.setAnimSpeed(animSpeed);
   }, [animSpeed]);
+
+  useEffect(() => {
+    rendererRef.current?.setLegalMoveOpacity(legalMoveOpacity);
+  }, [legalMoveOpacity]);
 
   useEffect(() => {
     rendererRef.current?.setMoveHandler(onMove);

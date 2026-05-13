@@ -1,14 +1,45 @@
 import { useEffect, useRef, useState } from "react";
-import { RUNES, xpToNextLevel, type LatticeKind } from "@gridlore/engine";
+import { xpToNextLevel, type Rune } from "@gridlore/engine";
 import { useRunStore } from "../state/store.js";
 import { subscribeLocaleChange, t, tRune } from "../i18n.js";
-import { RUNE_EMOJI } from "../pixi/palette.js";
 import { useWebHaptics } from "web-haptics/react";
+import {
+  COLORS,
+  FONTS,
+  displayHeading,
+  pixelBorder,
+  pixelButtonGhost,
+  pixelButtonPrimary,
+  pixelChip,
+  sectionLabel,
+} from "../theme.js";
+import { RUNE_COLORS } from "../pixi/palette.js";
 
-export function HUD({ playerName }: { playerName: string }) {
+function runeColorCss(rune: Rune): string {
+  const n = RUNE_COLORS[rune] ?? 0xffffff;
+  return `#${n.toString(16).padStart(6, "0")}`;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const raw = hex.startsWith("#") ? hex.slice(1) : hex;
+  if (raw.length !== 6) return `rgba(255,255,255,${alpha})`;
+  const r = parseInt(raw.slice(0, 2), 16);
+  const g = parseInt(raw.slice(2, 4), 16);
+  const b = parseInt(raw.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function HUD({
+  playerName,
+  onTryAgain,
+  onMainMenu,
+}: {
+  playerName: string;
+  onTryAgain: () => void;
+  onMainMenu: () => void;
+}) {
   const [, bump] = useState(0);
   const state = useRunStore((s) => s.state);
-  const reset = useRunStore((s) => s.reset);
   const usePotion = useRunStore((s) => s.usePotion);
   const { trigger } = useWebHaptics();
   const events = useRunStore((s) => s.lastEvents);
@@ -22,6 +53,8 @@ export function HUD({ playerName }: { playerName: string }) {
   const chargedCount = Array.from(lattices.byId.values()).filter((l) => l.isCharged).length;
   const totalLattices = lattices.byId.size;
   const lastKeystone = [...events].reverse().find((e) => e.type === "KEYSTONE_BONUS");
+  const lastKeystoneColor =
+    lastKeystone && lastKeystone.type === "KEYSTONE_BONUS" ? runeColorCss(lastKeystone.keystone) : null;
 
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
   useEffect(() => {
@@ -33,7 +66,6 @@ export function HUD({ playerName }: { playerName: string }) {
   function openInventory() {
     setInvOpen(true);
   }
-
   function closeInventory() {
     setInvOpen(false);
   }
@@ -46,7 +78,6 @@ export function HUD({ playerName }: { playerName: string }) {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {}
   }
-
   function onBagPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
     const s = bagSwipeRef.current;
     if (!s || !s.active || s.pointerId !== e.pointerId) return;
@@ -61,13 +92,11 @@ export function HUD({ playerName }: { playerName: string }) {
       openInventory();
     }
   }
-
   function onBagPointerUp(e: React.PointerEvent<HTMLButtonElement>) {
     const s = bagSwipeRef.current;
     if (!s || s.pointerId !== e.pointerId) return;
     bagSwipeRef.current = null;
   }
-
   function onBagClick() {
     if (ignoreInvClickRef.current) {
       ignoreInvClickRef.current = false;
@@ -99,53 +128,64 @@ export function HUD({ playerName }: { playerName: string }) {
   }
 
   return (
+    // Outer wrapper has NO backdrop-filter so it doesn't become a containing
+    // block for fixed-positioned overlays (run-over modal, inventory sheet).
+    // The glass effect lives on the absolute sibling div below.
     <div
       style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-        padding: "6px 10px 4px",
-        fontFamily: "ui-monospace, monospace",
-        fontSize: 12,
+        position: "relative",
         flexShrink: 0,
+        fontFamily: FONTS.body,
+        fontSize: 14,
       }}
     >
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "rgba(14, 10, 8, 0.6)",
+          backdropFilter: "blur(8px) saturate(1.1)",
+          WebkitBackdropFilter: "blur(8px) saturate(1.1)",
+          borderTop: `1px solid ${COLORS.borderSubtle}`,
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          padding: "10px 12px 8px",
+        }}
+      >
       <div
         style={{
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          gap: "0.4rem",
+          gap: 6,
           flexWrap: "nowrap",
-          opacity: 0.95,
-          height: 18,
-          lineHeight: "18px",
-          fontSize: 10,
           overflow: "hidden",
-          whiteSpace: "nowrap",
         }}
       >
-        <span>♥&nbsp;{hero.hp}/{hero.hpMax}</span>
-        <span>◆&nbsp;{hero.focus}/{hero.focusMax}</span>
-        <span>🛡&nbsp;{hero.armor}</span>
-        <span>
-          {t("hud.turnAbbr")}&nbsp;{turn}
-        </span>
-        <span>⚡&nbsp;{chargedCount}/{totalLattices}</span>
+        <StatChip color={COLORS.heart} icon="♥" value={`${hero.hp}/${hero.hpMax}`} />
+        <StatChip color={COLORS.accent} icon="◆" value={`${hero.focus}/${hero.focusMax}`} />
+        <StatChip color={COLORS.text} icon="🛡" value={`${hero.armor}`} />
+        <StatChip color={COLORS.textMuted} icon={t("hud.turnAbbr")} value={`${turn}`} mono />
+        <StatChip color={COLORS.win} icon="⚡" value={`${chargedCount}/${totalLattices}`} />
       </div>
 
-      <LatticeStrip />
-
-      {/* Always reserve space for the keystone callout so the grid never reflows. */}
       <div
         style={{
-          height: 22,
-          color: "#ffd95a",
-          background: lastKeystone ? "#2a2a3e" : "transparent",
-          padding: "2px 6px",
-          borderRadius: 3,
+          height: 24,
+          color: lastKeystoneColor ?? COLORS.win,
+          background: lastKeystoneColor ? hexToRgba(lastKeystoneColor, 0.12) : "transparent",
+          ...pixelBorder(lastKeystoneColor ?? "transparent", 1),
+          padding: "3px 8px",
           textAlign: "center",
-          fontSize: 11,
+          fontSize: 12,
           overflow: "hidden",
           whiteSpace: "nowrap",
           textOverflow: "ellipsis",
@@ -153,18 +193,16 @@ export function HUD({ playerName }: { playerName: string }) {
           lineHeight: "18px",
         }}
       >
-        {lastKeystone && lastKeystone.type === "KEYSTONE_BONUS"
-          ? formatEvent(lastKeystone)
-          : " "}
+        {lastKeystone && lastKeystone.type === "KEYSTONE_BONUS" ? formatEvent(lastKeystone) : " "}
       </div>
 
       <div
         style={{
-          opacity: 0.55,
-          height: 16,
-          lineHeight: "16px",
+          color: COLORS.textMuted,
+          height: 18,
+          lineHeight: "18px",
           textAlign: "center",
-          fontSize: 11,
+          fontSize: 13,
           overflow: "hidden",
           whiteSpace: "nowrap",
           textOverflow: "ellipsis",
@@ -190,28 +228,36 @@ export function HUD({ playerName }: { playerName: string }) {
           alignItems: "center",
           marginTop: 4,
           padding: "10px 10px 2px",
-          borderTop: "1px solid #2a2a3e",
-          fontFamily: "ui-monospace, monospace",
+          borderTop: `1px solid ${COLORS.divider}`,
+          fontFamily: FONTS.body,
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 170 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 180, flex: 1 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
             {playerName.trim() !== "" && (
-              <div style={{ fontSize: 12, letterSpacing: 0, opacity: 0.85 }}>{playerName}</div>
+              <div style={{ ...sectionLabel, color: COLORS.textMuted, fontSize: 8 }}>{playerName}</div>
             )}
-            <div style={{ fontSize: 16, letterSpacing: "0.06em" }}>
-              {t("hud.levelLabel")}&nbsp;{hero.level}
+            <div
+              style={{
+                fontFamily: FONTS.display,
+                fontSize: 11,
+                letterSpacing: "0.14em",
+                color: COLORS.text,
+              }}
+            >
+              {t("hud.levelLabel")} {hero.level}
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <div style={{ fontSize: 10, opacity: 0.7, width: 30 }}>{t("hud.xpLabel")}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ ...sectionLabel, color: COLORS.textMuted, width: 24, fontSize: 8 }}>
+              {t("hud.xpLabel")}
+            </div>
             <div
               style={{
                 flex: 1,
                 height: 10,
-                background: "#1a1a2a",
-                border: "1px solid #2a2a3e",
-                borderRadius: 999,
+                background: COLORS.bgSunkenSolid,
+                ...pixelBorder(COLORS.borderSubtle, 1),
                 overflow: "hidden",
               }}
               title={`${hero.xp}/${xpToNextLevel(hero.level)}`}
@@ -220,12 +266,19 @@ export function HUD({ playerName }: { playerName: string }) {
                 style={{
                   width: `${Math.round((hero.xp / xpToNextLevel(hero.level)) * 100)}%`,
                   height: "100%",
-                  background: "#ffd95a",
-                  opacity: 0.9,
+                  background: `linear-gradient(90deg, ${COLORS.primary}, ${COLORS.win})`,
                 }}
               />
             </div>
-            <div style={{ fontSize: 10, opacity: 0.7, textAlign: "right" }}>
+            <div
+              style={{
+                fontFamily: FONTS.mono,
+                fontSize: 11,
+                color: COLORS.textMuted,
+                textAlign: "right",
+                minWidth: 36,
+              }}
+            >
               {hero.xp}/{xpToNextLevel(hero.level)}
             </div>
           </div>
@@ -237,45 +290,75 @@ export function HUD({ playerName }: { playerName: string }) {
           onPointerUp={onBagPointerUp}
           onPointerCancel={onBagPointerUp}
           style={{
+            ...pixelChip,
             display: "flex",
-            alignItems: "baseline",
+            alignItems: "center",
             gap: 8,
-            background: "transparent",
-            color: "#e9e7d8",
-            border: "1px solid #2a2a3e",
-            borderRadius: 10,
-            padding: "6px 10px",
+            padding: "8px 12px",
+            fontFamily: FONTS.display,
+            fontSize: 10,
+            letterSpacing: "0.16em",
             cursor: "pointer",
-            opacity: 0.95,
-            fontFamily: "inherit",
             touchAction: "none",
+            marginLeft: 10,
           }}
           title={t("inventory.open")}
         >
           <span style={{ fontSize: 18, letterSpacing: 0 }}>🎒</span>
-          <span style={{ fontSize: 16, letterSpacing: "0.06em" }}>{t("inventory.title")}</span>
+          <span>{t("inventory.title")}</span>
         </button>
       </div>
+      </div>
 
-      {outcome === "win" && <Overlay title={t("overlay.win")} tone="win" />}
+      {outcome === "win" && (
+        <RunOverOverlay
+          tone="win"
+          stats={{ floor: currentFloor.index + 1, score: meta.score, turn, level: hero.level }}
+          onTryAgain={onTryAgain}
+          onMainMenu={onMainMenu}
+        />
+      )}
       {outcome === "death" && (
-        <Overlay
-          title={t("overlay.death")}
+        <RunOverOverlay
           tone="death"
-          actionLabel={t("hud.newRun")}
-          onAction={() => reset(`GRD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`)}
+          stats={{ floor: currentFloor.index + 1, score: meta.score, turn, level: hero.level }}
+          onTryAgain={onTryAgain}
+          onMainMenu={onMainMenu}
         />
       )}
 
       {invOpen && (
-        <InventorySheet
-          hero={hero}
-          gold={meta.gold}
-          onClose={closeInventory}
-          onUsePotion={onUsePotion}
-        />
+        <InventorySheet hero={hero} gold={meta.gold} onClose={closeInventory} onUsePotion={onUsePotion} />
       )}
     </div>
+  );
+}
+
+function StatChip({
+  color,
+  icon,
+  value,
+  mono,
+}: {
+  color: string;
+  icon: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <span
+      style={{
+        ...pixelChip,
+        padding: "4px 8px",
+        fontSize: 12,
+        letterSpacing: 0,
+        gap: 6,
+        textTransform: "none",
+      }}
+    >
+      <span style={{ color, fontFamily: mono ? FONTS.mono : FONTS.body }}>{icon}</span>
+      <span style={{ color: COLORS.text, fontFamily: FONTS.mono }}>{value}</span>
+    </span>
   );
 }
 
@@ -291,6 +374,10 @@ function InventorySheet({
   onUsePotion: () => void;
 }) {
   const canUsePotion = hero.potions > 0 && hero.hp < hero.hpMax;
+  const SLOT_COUNT = 20;
+  const items: Array<{ kind: "leaf" | "potion"; id: string }> = [];
+  for (let i = 0; i < hero.brambleProgress; i++) items.push({ kind: "leaf", id: `leaf-${i}` });
+  for (let i = 0; i < hero.potions; i++) items.push({ kind: "potion", id: `potion-${i}` });
   const [phase, setPhase] = useState<"enter" | "open" | "exit">("enter");
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const swipeCloseRef = useRef<{ pointerId: number; startX: number; startY: number; startScrollTop: number } | null>(null);
@@ -312,7 +399,6 @@ function InventorySheet({
     const scrollTop = sheetRef.current?.scrollTop ?? 0;
     swipeCloseRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, startScrollTop: scrollTop };
   }
-
   function onSheetPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     const s = swipeCloseRef.current;
     if (!s || s.pointerId !== e.pointerId) return;
@@ -328,7 +414,6 @@ function InventorySheet({
       requestClose();
     }
   }
-
   function onSheetPointerEnd(e: React.PointerEvent<HTMLDivElement>) {
     const s = swipeCloseRef.current;
     if (!s || s.pointerId !== e.pointerId) return;
@@ -342,7 +427,9 @@ function InventorySheet({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(11, 11, 20, 0.55)",
+        background: "rgba(8, 5, 3, 0.55)",
+        backdropFilter: "blur(2px)",
+        WebkitBackdropFilter: "blur(2px)",
         display: "grid",
         alignItems: "end",
         pointerEvents: "auto",
@@ -359,10 +446,11 @@ function InventorySheet({
         onPointerUp={onSheetPointerEnd}
         onPointerCancel={onSheetPointerEnd}
         style={{
-          background: "#11111c",
-          borderTop: "1px solid #2a2a3e",
-          borderRadius: "14px 14px 0 0",
-          padding: "10px 12px 14px",
+          background: "rgba(20, 14, 8, 0.85)",
+          backdropFilter: "blur(18px) saturate(1.25)",
+          WebkitBackdropFilter: "blur(18px) saturate(1.25)",
+          borderTop: `2px solid ${COLORS.border}`,
+          padding: "12px 14px 16px",
           maxHeight: "70vh",
           overflowY: "auto",
           boxSizing: "border-box",
@@ -370,155 +458,255 @@ function InventorySheet({
           transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)",
           willChange: "transform",
           touchAction: "pan-y",
+          boxShadow: `0 -8px 24px rgba(0, 0, 0, 0.6), 0 0 32px ${COLORS.primaryGlow}`,
         }}
       >
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "baseline",
+            alignItems: "center",
             gap: 10,
-            marginBottom: 10,
+            marginBottom: 12,
           }}
         >
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 18 }}>🎒</span>
-            <span style={{ fontSize: 14, letterSpacing: "0.06em" }}>{t("inventory.title")}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 20 }}>🎒</span>
+            <span style={{ fontFamily: FONTS.display, fontSize: 11, letterSpacing: "0.16em" }}>
+              {t("inventory.title")}
+            </span>
           </div>
           <button
             onClick={requestClose}
             style={{
-              background: "transparent",
-              color: "#e9e7d8",
-              border: "1px solid #2a2a3e",
-              borderRadius: 10,
+              ...pixelChip,
+              fontFamily: FONTS.display,
+              fontSize: 8,
+              letterSpacing: "0.18em",
               padding: "6px 10px",
-              cursor: "pointer",
-              fontFamily: "inherit",
-              opacity: 0.9,
             }}
           >
-            {t("inventory.close")}
+            ✕ {t("inventory.close")}
           </button>
         </div>
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 10,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 12,
+            marginBottom: 12,
+            color: COLORS.textMuted,
           }}
         >
-          <ItemCard icon="🌿" title={t("inventory.leaf")} value={`${hero.brambleProgress}/3`} />
-          <button
-            onClick={onUsePotion}
-            disabled={!canUsePotion}
-            style={{
-              display: "grid",
-              gap: 6,
-              placeItems: "center",
-              background: "transparent",
-              color: "#e9e7d8",
-              border: "1px solid #2a2a3e",
-              borderRadius: 12,
-              padding: "10px 8px",
-              cursor: canUsePotion ? "pointer" : "not-allowed",
-              opacity: hero.potions > 0 ? 0.95 : 0.45,
-              fontFamily: "inherit",
-            }}
-            title={t("inventory.potionHint", { potions: hero.potions, max: hero.potionsMax })}
-          >
-            <div style={{ fontSize: 22, lineHeight: "22px" }}>🧪</div>
-            <div style={{ fontSize: 11, opacity: 0.85, letterSpacing: "0.04em" }}>{t("inventory.potion")}</div>
-            <div style={{ fontSize: 12, letterSpacing: "0.06em" }}>{hero.potions}</div>
-          </button>
-          <ItemCard icon="🪙" title={t("inventory.coins")} value={`${gold}`} />
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: 16, lineHeight: "16px" }}>🪙</span>
+            <span style={{ ...sectionLabel, fontSize: 8 }}>{t("inventory.coins")}</span>
+            <span style={{ fontFamily: FONTS.mono, fontSize: 16, color: COLORS.text }}>{gold}</span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 8,
+          }}
+        >
+          {items.slice(0, SLOT_COUNT).map((it) =>
+            it.kind === "leaf" ? (
+              <InventorySlotItem key={it.id} icon="🌿" label={t("inventory.leaf")} />
+            ) : (
+              <InventorySlotPotion
+                key={it.id}
+                onClick={onUsePotion}
+                disabled={!canUsePotion}
+                highlight={canUsePotion}
+                label={t("inventory.potion")}
+                tooltip={t("inventory.potionHint", { potions: hero.potions })}
+              />
+            ),
+          )}
+          {Array.from({ length: Math.max(0, SLOT_COUNT - items.length) }).map((_, i) => (
+            <InventorySlotEmpty key={`empty-${i}`} />
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-function ItemCard({ icon, title, value }: { icon: string; title: string; value: string }) {
+function inventorySlotBaseStyle(): React.CSSProperties {
+  return {
+    display: "grid",
+    gap: 6,
+    placeItems: "center",
+    ...pixelBorder(COLORS.borderDim, 1),
+    padding: "10px 8px",
+    background: "rgba(8, 5, 3, 0.32)",
+    minHeight: 78,
+    boxSizing: "border-box",
+  };
+}
+
+function InventorySlotItem({ icon, label }: { icon: string; label: string }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gap: 6,
-        placeItems: "center",
-        border: "1px solid #2a2a3e",
-        borderRadius: 12,
-        padding: "10px 8px",
-        background: "rgba(26, 26, 42, 0.2)",
-      }}
-    >
-      <div style={{ fontSize: 22, lineHeight: "22px" }}>{icon}</div>
-      <div style={{ fontSize: 11, opacity: 0.85, letterSpacing: "0.04em", textAlign: "center" }}>{title}</div>
-      <div style={{ fontSize: 12, letterSpacing: "0.06em" }}>{value}</div>
+    <div style={inventorySlotBaseStyle()}>
+      <div style={{ fontSize: 24, lineHeight: "24px" }}>{icon}</div>
+      <div style={{ ...sectionLabel, fontSize: 8 }}>{label}</div>
     </div>
   );
 }
 
-function Overlay({
-  title,
-  tone,
-  actionLabel,
-  onAction,
+function InventorySlotPotion({
+  onClick,
+  disabled,
+  highlight,
+  label,
+  tooltip,
 }: {
-  title: string;
-  tone: "win" | "death";
-  actionLabel?: string;
-  onAction?: () => void;
+  onClick: () => void;
+  disabled: boolean;
+  highlight: boolean;
+  label: string;
+  tooltip: string;
 }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        ...inventorySlotBaseStyle(),
+        background: "transparent",
+        color: COLORS.text,
+        ...pixelBorder(highlight ? COLORS.primary : COLORS.borderDim, 1),
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.6 : 1,
+        fontFamily: FONTS.body,
+      }}
+      title={tooltip}
+    >
+      <div style={{ fontSize: 24, lineHeight: "24px" }}>🧪</div>
+      <div style={{ ...sectionLabel, fontSize: 8 }}>{label}</div>
+    </button>
+  );
+}
+
+function InventorySlotEmpty() {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        ...inventorySlotBaseStyle(),
+        background: "rgba(8, 5, 3, 0.18)",
+        opacity: 0.9,
+      }}
+    />
+  );
+}
+
+function RunOverOverlay({
+  tone,
+  stats,
+  onTryAgain,
+  onMainMenu,
+}: {
+  tone: "win" | "death";
+  stats: { floor: number; score: number; turn: number; level: number };
+  onTryAgain: () => void;
+  onMainMenu: () => void;
+}) {
+  const accent = tone === "win" ? COLORS.win : COLORS.death;
+  const titleKey = tone === "win" ? "runOver.win" : "runOver.death";
+  const icon = tone === "win" ? "⚑" : "🪦";
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(11, 11, 20, 0.7)",
+        background: "rgba(8, 5, 3, 0.7)",
+        backdropFilter: "blur(6px) saturate(0.9)",
+        WebkitBackdropFilter: "blur(6px) saturate(0.9)",
         display: "grid",
         placeItems: "center",
         pointerEvents: "auto",
         zIndex: 5,
+        padding: 18,
+        boxSizing: "border-box",
       }}
     >
       <div
         style={{
-          padding: "1.5rem 2rem",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 14,
-          fontSize: "1.6rem",
-          letterSpacing: "0.08em",
-          color: tone === "win" ? "#ffd95a" : "#ff6a6a",
-          background: "#11111c",
-          border: `1px solid ${tone === "win" ? "#ffd95a" : "#ff6a6a"}`,
-          borderRadius: 6,
+          width: "min(440px, 100%)",
+          background: "rgba(20, 14, 8, 0.88)",
+          backdropFilter: "blur(18px) saturate(1.25)",
+          WebkitBackdropFilter: "blur(18px) saturate(1.25)",
+          ...pixelBorder(accent, 2),
+          padding: "24px 22px 22px",
+          textAlign: "center",
+          color: COLORS.text,
+          boxShadow: `0 0 0 4px rgba(0, 0, 0, 0.4), 0 0 40px ${
+            tone === "win" ? "rgba(232, 198, 116, 0.45)" : "rgba(196, 88, 90, 0.45)"
+          }`,
         }}
       >
-        {tone === "death" && <div style={{ fontSize: 28, lineHeight: "28px" }}>🪦</div>}
-        <div>{title}</div>
-        {actionLabel && onAction && (
-          <button
-            onClick={onAction}
-            style={{
-              background: "transparent",
-              color: "#e9e7d8",
-              border: "1px solid #2a2a3e",
-              padding: "10px 14px",
-              cursor: "pointer",
-              fontFamily: "ui-monospace, monospace",
-              fontSize: 14,
-              borderRadius: 10,
-              letterSpacing: "0.06em",
-              opacity: 0.95,
-            }}
-          >
-            {actionLabel}
+        <div style={{ fontSize: 44, lineHeight: "44px", marginBottom: 6 }}>{icon}</div>
+        <div style={{ ...sectionLabel, color: accent }}>{t("runOver.title")}</div>
+        <div
+          style={{
+            ...displayHeading,
+            fontSize: 16,
+            marginTop: 10,
+            textShadow: `0 0 16px ${accent}`,
+            color: accent,
+            letterSpacing: "0.06em",
+          }}
+        >
+          {t(titleKey)}
+        </div>
+
+        <div
+          style={{
+            marginTop: 18,
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 10,
+          }}
+        >
+          <StatTile label={t("runOver.statFloor")} value={`${stats.floor}`} />
+          <StatTile label={t("runOver.statScore")} value={`${stats.score}`} />
+          <StatTile label={t("runOver.statLevel")} value={`${stats.level}`} />
+          <StatTile label={t("runOver.statTurn")} value={`${stats.turn}`} />
+        </div>
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 22, flexWrap: "wrap" }}>
+          <button onClick={onTryAgain} style={{ ...pixelButtonPrimary, fontSize: 11 }}>
+            ♥ {t("runOver.again")}
           </button>
-        )}
+          <button onClick={onMainMenu} style={{ ...pixelButtonGhost, padding: "10px 16px" }}>
+            ☰ {t("runOver.menu")}
+          </button>
+        </div>
       </div>
+    </div>
+  );
+}
+
+function StatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      style={{
+        ...pixelBorder(COLORS.borderSubtle, 1),
+        padding: "10px 8px",
+        background: "rgba(8, 5, 3, 0.55)",
+        display: "grid",
+        gap: 4,
+        placeItems: "center",
+      }}
+    >
+      <div style={{ ...sectionLabel, fontSize: 8 }}>{label}</div>
+      <div style={{ fontFamily: FONTS.display, fontSize: 14, color: COLORS.text }}>{value}</div>
     </div>
   );
 }
@@ -540,76 +728,6 @@ function pickPrimaryEvent(
     }
   }
   return events[events.length - 1];
-}
-
-function LatticeStrip() {
-  const state = useRunStore((s) => s.state);
-  const lattices = state.currentFloor.lattices;
-  const gridW = state.currentFloor.grid.width;
-  const gridH = state.currentFloor.grid.height;
-  const chamberCount = state.currentFloor.grid.chamberCount;
-
-  const groups: { kind: LatticeKind; label: string; count: number }[] = [
-    { kind: "row", label: t("hud.rowsAbbr"), count: gridH },
-    { kind: "column", label: t("hud.colsAbbr"), count: gridW },
-    { kind: "chamber", label: t("hud.chambersAbbr"), count: chamberCount },
-  ];
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 1,
-        alignItems: "center",
-      }}
-    >
-      {groups.map(({ kind, label, count }) => (
-        <div
-          key={kind}
-          style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}
-        >
-          <span style={{ width: 16, opacity: 0.55, textAlign: "right" }}>{label}</span>
-          <div style={{ display: "flex", gap: 2 }}>
-            {Array.from({ length: count }, (_, i) => {
-              const id = `${kind}:${i}` as const;
-              const lat = lattices.byId.get(id);
-              const threshold = lat?.chargeThreshold ?? RUNES.length;
-              const unique = lat?.runesPresent.size ?? 0;
-              const filled = Math.min(unique, threshold);
-              const charged = (lat?.isCharged ?? false) || unique >= threshold;
-              const near = !charged && unique === threshold - 1;
-              const runes =
-                lat && unique > 0
-                  ? Array.from(lat.runesPresent)
-                      .slice(0, 9)
-                      .map((r) => RUNE_EMOJI[r])
-                      .join("")
-                  : "";
-              return (
-                <span
-                  key={i}
-                  title={`${id} ${unique}/${threshold}${runes ? ` ${runes}` : ""}`}
-                  style={{
-                    display: "inline-block",
-                    minWidth: 22,
-                    textAlign: "center",
-                    color: charged ? "#ffd95a" : near ? "#a6c7ff" : "#7a7a90",
-                    background: charged ? "#3a3a55" : near ? "#1b2433" : "transparent",
-                    borderRadius: 2,
-                    padding: "0 3px",
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {filled}/{threshold}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function formatEvent(e: NonNullable<ReturnType<typeof useRunStore.getState>["lastEvents"][number]>): string {
@@ -651,9 +769,9 @@ function formatEvent(e: NonNullable<ReturnType<typeof useRunStore.getState>["las
     case "HERO_LEVELED_UP":
       return t("event.heroLeveledUp", { level: e.level, hpMax: e.hpMax });
     case "POTION_GAINED":
-      return t("event.potionGained", { potions: e.potions, max: e.potionsMax });
+      return t("event.potionGained", { potions: e.potions });
     case "POTION_USED":
-      return t("event.potionUsed", { healed: e.healed, potions: e.potions, max: e.potionsMax });
+      return t("event.potionUsed", { healed: e.healed, potions: e.potions });
     case "KEY_DROPPED":
       return t("event.keyDropped");
     case "KEY_COLLECTED":
@@ -669,7 +787,6 @@ function formatEvent(e: NonNullable<ReturnType<typeof useRunStore.getState>["las
     case "TURN_STARTED":
       return t("event.turnStarted", { turn: e.turn });
     default: {
-      // Exhaustive switch — every event type handled.
       const _exhaustive: never = e;
       return String((_exhaustive as { type?: string })?.type ?? "");
     }
@@ -703,9 +820,7 @@ function formatKeystoneBonus(
     case "ember":
       return t("event.keystoneBonus.ember", { atk: e.effect.attackGained, total: e.effect.attack });
     case "bramble":
-      return e.effect.potionGained
-        ? t("event.keystoneBonus.bramble", { potions: e.effect.potions, max: e.effect.potionsMax })
-        : t("event.keystoneBonus.brambleFull", { max: e.effect.potionsMax });
+      return t("event.keystoneBonus.bramble", { potions: e.effect.potions });
     case "star":
       return t("event.keystoneBonus.star", { xp: e.effect.xpGained, level: e.effect.level });
     case "void":

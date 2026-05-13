@@ -16,7 +16,7 @@
  */
 
 import { Application, Container, Graphics, Text, type FederatedPointerEvent } from "pixi.js";
-import { chebyshev, cellEq, type Cell, type GameEvent, type Rune, type RunState, type Tile } from "@gridlore/engine";
+import { cellEq, type Cell, type GameEvent, type Rune, type RunState, type Tile } from "@gridlore/engine";
 import { t } from "../i18n.js";
 import {
   COLORS,
@@ -36,8 +36,9 @@ type MoveHandler = (cell: Cell) => void;
 const BOARD_PADDING = 4;
 /** Card width / height — e.g. 9/16 makes tall cards. */
 const CARD_ASPECT = 9 / 16;
-/** Inner-card margin as a fraction of cell width. */
-const CARD_MARGIN_FRAC = 0.07;
+/** Inner-card margin as a fraction of cell width — controls the gap between
+ *  adjacent cards. Smaller = bigger cards, less visible spacing. */
+const CARD_MARGIN_FRAC = 0.038;
 const TILE_EMOJI_SCALE = 0.52;
 const HERO_EMOJI_SCALE = 0.52;
 const DEFAULT_ANIM_SPEED = 0.7;
@@ -62,12 +63,27 @@ export class GridRenderer {
   private lastAnimKey: string | null = null;
   private moveHandler: MoveHandler = () => {};
   private animSpeed = DEFAULT_ANIM_SPEED;
+  private legalMoveOpacity = 0.4;
   private readonly activeAnimations: {
     readonly node: Container;
     elapsedMs: number;
     readonly durationMs: number;
     readonly update: (t: number) => void;
   }[] = [];
+
+  // Hero tween (smooth movement) — heroLayer.position is shifted from its
+  // base of (0,0) toward the previous cell, then eased back.
+  private heroTweenMs = 0;
+  private heroTweenBaseMs = 0;
+  private heroTweenFromX = 0;
+  private heroTweenFromY = 0;
+
+  // Board shake (combat impact) — offsets board.position from its layout base.
+  private shakeMs = 0;
+  private shakeBaseMs = 0;
+  private shakeIntensity = 0;
+  private boardBaseX = 0;
+  private boardBaseY = 0;
 
   constructor(app: Application) {
     this.app = app;
@@ -91,6 +107,8 @@ export class GridRenderer {
     this.app.ticker.add((ticker) => {
       const dtMs = (ticker.deltaMS ?? 16.6667) as number;
       this.stepAnimations(dtMs);
+      this.updateHeroTween(dtMs);
+      this.updateShake(dtMs);
     });
   }
 
@@ -99,7 +117,9 @@ export class GridRenderer {
     const w = Math.max(1, parent.clientWidth);
     const h = Math.max(1, parent.clientHeight);
     await app.init({
-      background: COLORS.bg,
+      // Transparent canvas — the Uku Pacha temple background shows through
+      // the gaps between cards and through each card's own translucent fill.
+      backgroundAlpha: 0,
       antialias: true,
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
@@ -121,6 +141,15 @@ export class GridRenderer {
   setAnimSpeed(speed: number): void {
     if (!Number.isFinite(speed)) return;
     this.animSpeed = clamp(speed, 0.2, 2);
+  }
+
+  /** Opacity for the legal-move stroke (0 = invisible, 1 = full). */
+  setLegalMoveOpacity(opacity: number): void {
+    if (!Number.isFinite(opacity)) return;
+    const next = clamp(opacity, 0, 1);
+    if (next === this.legalMoveOpacity) return;
+    this.legalMoveOpacity = next;
+    if (this.currentState) this.drawHighlights();
   }
 
   resize(): void {
@@ -183,6 +212,8 @@ export class GridRenderer {
               to: targetCell,
               showDamage: e.amount,
             });
+            this.triggerShake(Math.min(2.5 + e.amount * 0.4, 5), 180);
+            this.impactParticles(targetCell, COLORS.attackStat);
           } else if (target === heroId && source !== heroId) {
             const enemyId = String(source);
             const enemyCell = this.enemyCellFromEventsOrState(enemyId, events, state);
@@ -195,7 +226,15 @@ export class GridRenderer {
               to: state.hero.position,
               showDamage: e.amount,
             });
+            this.triggerShake(Math.min(3.5 + e.amount * 0.6, 7), 240);
+            this.impactParticles(state.hero.position, COLORS.hpStat);
           }
+          break;
+        }
+        case "HERO_MOVED": {
+          const fromPx = this.cellCenterPx(e.from);
+          const toPx = this.cellCenterPx(e.to);
+          this.startHeroTween(fromPx.x - toPx.x, fromPx.y - toPx.y, 130);
           break;
         }
         case "LATTICE_CHARGED": {
@@ -214,6 +253,9 @@ export class GridRenderer {
       switch (e.type) {
         case "DAMAGE_DEALT":
           parts.push(`d:${e.source}:${e.target}:${e.amount}`);
+          break;
+        case "HERO_MOVED":
+          parts.push(`hm:${e.from.x},${e.from.y}>${e.to.x},${e.to.y}`);
           break;
         case "LATTICE_CHARGED":
           parts.push(`lc:${e.lattice}:${e.keystone}`);
@@ -385,6 +427,90 @@ export class GridRenderer {
     return Math.max(1, Math.round(baseMs / this.animSpeed));
   }
 
+  /** Begin a smooth hero-cell tween from the given pixel offset toward 0. */
+  private startHeroTween(offsetX: number, offsetY: number, baseDurationMs: number): void {
+    const dur = this.animMs(baseDurationMs);
+    this.heroTweenBaseMs = dur;
+    this.heroTweenMs = dur;
+    this.heroTweenFromX = offsetX;
+    this.heroTweenFromY = offsetY;
+    // Snap heroLayer to the previous cell so the next paint kicks off the
+    // animation immediately (no 1-frame "jump to new cell, then tween back").
+    this.heroLayer.position.set(offsetX, offsetY);
+  }
+
+  private updateHeroTween(dtMs: number): void {
+    if (this.heroTweenMs <= 0) return;
+    this.heroTweenMs -= dtMs;
+    if (this.heroTweenMs <= 0) {
+      this.heroLayer.position.set(0, 0);
+      this.heroTweenMs = 0;
+      return;
+    }
+    const progress = 1 - this.heroTweenMs / this.heroTweenBaseMs;
+    const eased = easeOutCubic(progress);
+    const remaining = 1 - eased;
+    this.heroLayer.position.set(
+      this.heroTweenFromX * remaining,
+      this.heroTweenFromY * remaining,
+    );
+  }
+
+  /** Trigger a short board shake. Subsequent calls extend duration and pick
+   *  the larger magnitude so a chained punch doesn't dampen itself. */
+  private triggerShake(intensity: number, baseDurationMs: number): void {
+    const dur = this.animMs(baseDurationMs);
+    this.shakeBaseMs = dur;
+    this.shakeMs = dur;
+    this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
+  }
+
+  private updateShake(dtMs: number): void {
+    if (this.shakeMs <= 0) return;
+    this.shakeMs -= dtMs;
+    if (this.shakeMs <= 0) {
+      this.board.position.set(this.boardBaseX, this.boardBaseY);
+      this.shakeMs = 0;
+      this.shakeIntensity = 0;
+      return;
+    }
+    const t = this.shakeMs / this.shakeBaseMs;
+    const mag = this.shakeIntensity * t;
+    const angle = Math.random() * Math.PI * 2;
+    this.board.position.set(
+      this.boardBaseX + Math.cos(angle) * mag,
+      this.boardBaseY + Math.sin(angle) * mag,
+    );
+  }
+
+  /** Emit a small ring of decaying spark particles from a cell — used as
+   *  impact feedback on attacks. */
+  private impactParticles(cell: Cell, color: number): void {
+    const center = this.cellCenterPx(cell);
+    const { cardW } = this.cardDims();
+    const count = 5;
+    const size = Math.max(2, Math.floor(cardW * 0.045));
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      const distance = cardW * (0.32 + Math.random() * 0.18);
+      const tx = Math.cos(angle) * distance;
+      const ty = Math.sin(angle) * distance;
+      const p = new Graphics();
+      p.rect(-size / 2, -size / 2, size, size).fill({ color, alpha: 1 });
+      p.position.set(center.x, center.y);
+      this.animationLayer.addChild(p);
+      const durationMs = this.animMs(360);
+      const update = (t: number) => {
+        const eased = easeOutCubic(t);
+        p.position.set(center.x + tx * eased, center.y + ty * eased);
+        p.alpha = 1 - t;
+        const s = 1 - t * 0.5;
+        p.scale.set(s, s);
+      };
+      this.activeAnimations.push({ node: p, elapsedMs: 0, durationMs, update });
+    }
+  }
+
   private cellsCenterPx(cells: readonly Cell[]): { x: number; y: number } {
     let sx = 0;
     let sy = 0;
@@ -461,10 +587,17 @@ export class GridRenderer {
 
     const boardW = cellW * gridW;
     const boardH = cellH * gridH;
-    this.board.position.set(
-      Math.round((w - boardW) / 2),
-      Math.round((h - boardH) / 2),
-    );
+    const baseX = Math.round((w - boardW) / 2);
+    const baseY = Math.round((h - boardH) / 2);
+    this.board.position.set(baseX, baseY);
+    this.boardBaseX = baseX;
+    this.boardBaseY = baseY;
+    // Cancel any in-flight transient effects whose math depended on old
+    // pixel coords; the hero would otherwise tween toward a stale offset.
+    this.heroTweenMs = 0;
+    this.heroLayer.position.set(0, 0);
+    this.shakeMs = 0;
+    this.shakeIntensity = 0;
   }
 
   private cardDims(): { cardW: number; cardH: number; marginX: number; marginY: number; radius: number } {
@@ -472,7 +605,8 @@ export class GridRenderer {
     const marginY = Math.max(3, Math.floor(this.cellHeight * CARD_MARGIN_FRAC));
     const cardW = this.cellWidth - marginX * 2;
     const cardH = this.cellHeight - marginY * 2;
-    const radius = Math.max(6, Math.floor(Math.min(cardW, cardH) * 0.1));
+    // Undertale-style: square pixel corners.
+    const radius = 0;
     return { cardW, cardH, marginX, marginY, radius };
   }
 
@@ -482,7 +616,7 @@ export class GridRenderer {
     const grid = state.currentFloor.grid;
     this.cellLayer.removeChildren();
     const exitUnlocked = state.currentFloor.exitUnlocked;
-    const { cardW, cardH, marginX, marginY, radius } = this.cardDims();
+    const { cardW, cardH, marginX, marginY } = this.cardDims();
 
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
@@ -490,7 +624,6 @@ export class GridRenderer {
         const isExit = tile.kind === "exit";
         const isEnemy = tile.kind === "enemy";
         const isHero = cellEq({ x, y }, state.hero.position);
-        const tinted = isCellInChargedLattice(state, { x, y });
         const fill = isHero
           ? COLORS.heroCardFill
           : isEnemy
@@ -499,35 +632,71 @@ export class GridRenderer {
               ? exitUnlocked
                 ? COLORS.exitFill
                 : COLORS.exitLockedFill
-              : tinted
-                ? COLORS.cellChargedTint
-                : COLORS.cellEmpty;
+              : COLORS.cellEmpty;
 
         const cardX = x * this.cellWidth + marginX;
         const cardY = y * this.cellHeight + marginY;
-        const strokeColor = isHero
-          ? COLORS.heroOutline
-          : isEnemy
-            ? COLORS.enemyCardStroke
-            : isExit
-              ? exitUnlocked
-                ? COLORS.exitStroke
-                : COLORS.exitLockedStroke
-              : COLORS.cardBorder;
-        const strokeWidth = isHero || isEnemy ? 2 : isExit ? 2 : 1;
-        const strokeAlpha = isHero || isExit || isEnemy ? 0.95 : 0.55;
+
+        // Stone-tile look: translucent dark fill so the temple bg shows
+        // through, copper hairline border, lighter top bevel + darker bottom
+        // bevel + faint right shadow. Only hero/exit cards get a colored
+        // outer frame — enemies are marked by the heart+HP corner indicator
+        // drawn later. Charged-lattice cells get a cyan tint overlay.
+        const bevelStrip = Math.max(1, Math.floor(cardH * 0.06));
+        const sideStrip = Math.max(1, Math.floor(cardW * 0.04));
+        const isSpecial = isHero || isExit;
+        const fillAlpha = isSpecial ? 0.76 : isEnemy ? 0.68 : 0.65;
 
         const g = new Graphics();
-        g.roundRect(cardX + 2, cardY + 3, cardW, cardH, radius).fill({
-          color: COLORS.cardShadow,
-          alpha: 0.4,
+
+        // Card body as a notched-corner octagon (1-px chamfer per corner)
+        // so the silhouette reads as a pixel-art tile. The temple bg shines
+        // through the four corners.
+        const c = 1;
+        const path: number[] = [
+          cardX + c, cardY,
+          cardX + cardW - c, cardY,
+          cardX + cardW, cardY + c,
+          cardX + cardW, cardY + cardH - c,
+          cardX + cardW - c, cardY + cardH,
+          cardX + c, cardY + cardH,
+          cardX, cardY + cardH - c,
+          cardX, cardY + c,
+        ];
+        g.poly(path).fill({ color: fill, alpha: fillAlpha });
+
+        // Bevel — lighter top, darker bottom, faint right-edge shadow.
+        g.rect(cardX + c, cardY, cardW - c * 2, bevelStrip).fill({
+          color: COLORS.cardBevelHighlight,
+          alpha: 0.6,
         });
-        g.roundRect(cardX, cardY, cardW, cardH, radius).fill(fill);
-        g.roundRect(cardX, cardY, cardW, cardH, radius).stroke({
-          color: strokeColor,
-          width: strokeWidth,
-          alpha: strokeAlpha,
+        g.rect(cardX + c, cardY + cardH - bevelStrip, cardW - c * 2, bevelStrip).fill({
+          color: COLORS.cardBevelShadow,
+          alpha: 0.7,
         });
+        g.rect(
+          cardX + cardW - sideStrip,
+          cardY + bevelStrip,
+          sideStrip,
+          cardH - bevelStrip * 2,
+        ).fill({ color: COLORS.cardBevelShadow, alpha: 0.3 });
+
+        // Hero-only ceremonial inner hairline — reads as a decorated tile
+        // rather than a heavy border. The legal-move stroke (drawn on a
+        // separate layer) remains the only other active outline.
+        if (isHero) {
+          const innerInset = 2//Math.max(2, Math.floor(Math.min(cardW, cardH) * 0.08));
+          g.rect(
+            cardX + 2,
+            cardY + 2,
+            cardW - innerInset * 2,
+            cardH - innerInset * 2,
+          ).stroke({
+            color: COLORS.heroOutline,
+            width: 2,
+            alpha: 0.9,
+          });
+        }
 
         g.eventMode = "static";
         g.cursor = isExit && !exitUnlocked ? "not-allowed" : "pointer";
@@ -758,41 +927,7 @@ export class GridRenderer {
 
   private drawHighlights(): void {
     if (!this.currentState) return;
-    const state = this.currentState;
-    const { hero } = state;
-    const grid = state.currentFloor.grid;
     this.highlightLayer.removeChildren();
-    const stride = hero.stride;
-    const exitUnlocked = state.currentFloor.exitUnlocked;
-    const { cardW, cardH, marginX, marginY, radius } = this.cardDims();
-    const inset = 3;
-
-    for (let dy = -stride; dy <= stride; dy++) {
-      for (let dx = -stride; dx <= stride; dx++) {
-        if (dx === 0 && dy === 0) continue;
-        const c: Cell = { x: hero.position.x + dx, y: hero.position.y + dy };
-        if (c.x < 0 || c.x >= grid.width || c.y < 0 || c.y >= grid.height) continue;
-        if (chebyshev(hero.position, c) > stride) continue;
-        const tile = grid.get(c);
-        if (tile.anchored) continue;
-        if (tile.kind === "exit" && !exitUnlocked) continue;
-        // Exit already has its own border styling (unlocked/locked) — don't double up.
-        if (tile.kind === "exit") continue;
-        // Enemy cards already wear a bright red border — don't double up.
-        if (tile.kind === "enemy") continue;
-
-        const g = new Graphics();
-        g.roundRect(
-          c.x * this.cellWidth + marginX + inset,
-          c.y * this.cellHeight + marginY + inset,
-          cardW - inset * 2,
-          cardH - inset * 2,
-          radius,
-        );
-        g.stroke({ color: COLORS.cellLegalMove, width: 3, alpha: 0.95 });
-        this.highlightLayer.addChild(g);
-      }
-    }
   }
 
   private drawHero(): void {
@@ -866,14 +1001,6 @@ export class GridRenderer {
       );
     }
   }
-}
-
-function isCellInChargedLattice(state: RunState, cell: Cell): boolean {
-  const snap = state.currentFloor.lattices;
-  if (snap.byId.get(`row:${cell.y}`)?.isCharged) return true;
-  if (snap.byId.get(`column:${cell.x}`)?.isCharged) return true;
-  const idx = state.currentFloor.grid.chamberIndex(cell);
-  return snap.byId.get(`chamber:${idx}`)?.isCharged === true;
 }
 
 function lerp(a: number, b: number, t: number): number {

@@ -267,7 +267,6 @@ function applyUsePotion(state: RunState): TurnResult {
     type: "POTION_USED",
     healed,
     potions: nextState.hero.potions,
-    potionsMax: nextState.hero.potionsMax,
   });
 
   nextState = {

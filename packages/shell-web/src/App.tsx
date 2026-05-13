@@ -1,12 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GridView } from "./components/GridView.js";
 import { HUD } from "./components/HUD.js";
+import { TitleScreen, type TitleCardEntry } from "./components/TitleScreen.js";
 import { LOCALES, getLocale, setLocale, subscribeLocaleChange, t } from "./i18n.js";
 import { useRunStore } from "./state/store.js";
 import { useWebHaptics } from "web-haptics/react";
+import {
+  COLORS,
+  FONTS,
+  modalBackdrop,
+  modalPanel,
+  pixelBorder,
+  pixelButtonGhost,
+  pixelButtonPrimary,
+  pixelChip,
+  sectionLabel,
+} from "./theme.js";
+import bgUkuPacha from "./assets/uku-pacha.png";
+import bgDungeon from "./assets/dungeon.png";
 import type { Cell, RunOutcome } from "@gridlore/engine";
 
-/** Order of sections rendered in the help modal. Keys mirror i18n. */
 const HELP_SECTIONS = [
   "goal",
   "move",
@@ -21,17 +34,21 @@ const HELP_SECTIONS = [
 const ANIM_SPEED_STORAGE_KEY = "gridlore:animSpeed";
 const HAPTICS_STORAGE_KEY = "gridlore:hapticsEnabled";
 const SWIPE_SENSITIVITY_STORAGE_KEY = "gridlore:swipeSensitivity";
+const LEGAL_MOVE_OPACITY_STORAGE_KEY = "gridlore:legalMoveOpacity";
 const PLAYER_NAME_STORAGE_KEY = "gridlore:playerName";
 const PLAYER_ID_STORAGE_KEY = "gridlore:playerId";
 const DEFAULT_ANIM_SPEED = 0.7;
 const DEFAULT_HAPTICS_ENABLED = true;
 const DEFAULT_SWIPE_SENSITIVITY = 1.25;
+const DEFAULT_LEGAL_MOVE_OPACITY = 0.4;
 const DEFAULT_PLAYER_NAME = "";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? "";
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
 const LEADERBOARD_TABLE = (import.meta.env.VITE_SUPABASE_LEADERBOARD_TABLE as string | undefined) ?? "leaderboard_entries";
 let leaderboardSupportsPlayerId: boolean | null = null;
+
+const CHALLENGER_EMOJI: ReadonlyArray<string> = ["🐱", "🦇", "🕷", "💀", "👹", "🐀", "🐍", "👻"];
 
 function readAnimSpeed(): number {
   try {
@@ -64,6 +81,17 @@ function readSwipeSensitivity(): number {
     return Math.max(0.5, Math.min(2, n));
   } catch {
     return DEFAULT_SWIPE_SENSITIVITY;
+  }
+}
+
+function readLegalMoveOpacity(): number {
+  try {
+    const raw = localStorage.getItem(LEGAL_MOVE_OPACITY_STORAGE_KEY);
+    const n = raw == null ? NaN : Number(raw);
+    if (!Number.isFinite(n)) return DEFAULT_LEGAL_MOVE_OPACITY;
+    return Math.max(0.05, Math.min(1, n));
+  } catch {
+    return DEFAULT_LEGAL_MOVE_OPACITY;
   }
 }
 
@@ -287,6 +315,10 @@ function readOrCreatePlayerId(): string {
   }
 }
 
+function newSeed(): string {
+  return `GRD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+}
+
 export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -295,6 +327,7 @@ export function App() {
   const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
   const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, DEFAULT_HAPTICS_ENABLED));
   const [swipeSensitivity, setSwipeSensitivity] = useState(readSwipeSensitivity);
+  const [legalMoveOpacity, setLegalMoveOpacity] = useState(readLegalMoveOpacity);
   const [playerId] = useState(readOrCreatePlayerId);
   const [playerName, setPlayerName] = useState(() => readPlayerName() || DEFAULT_PLAYER_NAME);
   const [namePromptOpen, setNamePromptOpen] = useState(() => !readPlayerName());
@@ -302,12 +335,15 @@ export function App() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [screen, setScreen] = useState<"title" | "playing">("title");
   const lastRecordedRef = useRef<string>("");
   const { trigger } = useWebHaptics();
   const score = useRunStore((s) => s.state.meta.score);
   const floorIndex = useRunStore((s) => s.state.currentFloor.index);
   const outcome = useRunStore((s) => s.state.outcome);
   const seed = useRunStore((s) => s.state.seed);
+  const turn = useRunStore((s) => s.state.turn);
+  const reset = useRunStore((s) => s.reset);
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
 
   useEffect(() => {
@@ -352,6 +388,22 @@ export function App() {
       });
   }, [floorIndex, outcome, playerId, playerName, refreshLeaderboard, score, seed]);
 
+  const startRun = useCallback(() => {
+    if (outcome !== "in_progress") {
+      reset(newSeed());
+    }
+    setScreen("playing");
+  }, [outcome, reset]);
+
+  const tryAgain = useCallback(() => {
+    reset(newSeed());
+    setScreen("playing");
+  }, [reset]);
+
+  const returnToMenu = useCallback(() => {
+    setScreen("title");
+  }, []);
+
   const attemptMove = useCallback(
     (to: Cell, source: "tap" | "keyboard") => {
       const store = useRunStore.getState();
@@ -383,6 +435,7 @@ export function App() {
   const onGridMove = useCallback((cell: Cell) => attemptMove(cell, "tap"), [attemptMove]);
 
   useEffect(() => {
+    if (screen !== "playing") return;
     const pressed = new Set<"up" | "down" | "left" | "right">();
     const latched = new Set<"up" | "down" | "left" | "right">();
     let pendingMoveTimer: number | null = null;
@@ -509,9 +562,10 @@ export function App() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [attemptMove]);
+  }, [attemptMove, hapticsEnabled, trigger, screen]);
 
   useEffect(() => {
+    if (screen !== "playing") return;
     let active:
       | {
           id: number;
@@ -737,7 +791,7 @@ export function App() {
       window.removeEventListener("touchend", onTouchEnd, true);
       window.removeEventListener("touchcancel", onTouchCancel, true);
     };
-  }, [hapticsEnabled, trigger, swipeSensitivity]);
+  }, [hapticsEnabled, trigger, swipeSensitivity, screen]);
 
   function updateAnimSpeed(v: number) {
     const clamped = Math.max(0.2, Math.min(2, v));
@@ -752,6 +806,14 @@ export function App() {
     setSwipeSensitivity(clamped);
     try {
       localStorage.setItem(SWIPE_SENSITIVITY_STORAGE_KEY, String(clamped));
+    } catch {}
+  }
+
+  function updateLegalMoveOpacity(v: number) {
+    const clamped = Math.max(0.05, Math.min(1, v));
+    setLegalMoveOpacity(clamped);
+    try {
+      localStorage.setItem(LEGAL_MOVE_OPACITY_STORAGE_KEY, String(clamped));
     } catch {}
   }
 
@@ -777,6 +839,7 @@ export function App() {
     setLocale("en");
     updateAnimSpeed(DEFAULT_ANIM_SPEED);
     updateSwipeSensitivity(DEFAULT_SWIPE_SENSITIVITY);
+    updateLegalMoveOpacity(DEFAULT_LEGAL_MOVE_OPACITY);
     updateHapticsEnabled(DEFAULT_HAPTICS_ENABLED);
   }
 
@@ -791,579 +854,653 @@ export function App() {
     }
   }
 
+  const topRunsForCards: TitleCardEntry[] = useMemo(
+    () =>
+      leaderboard.slice(0, 5).map((entry, i) => ({
+        name: entry.name,
+        score: entry.score,
+        floor: entry.floor,
+        emoji: CHALLENGER_EMOJI[i % CHALLENGER_EMOJI.length] ?? "🐱",
+      })),
+    [leaderboard],
+  );
+
+  const canContinue = outcome === "in_progress" && turn > 0;
+
+  const openHelp = () => {
+    setSettingsOpen(false);
+    setLeaderboardOpen(false);
+    setHelpOpen(true);
+  };
+  const openSettings = () => {
+    setHelpOpen(false);
+    setLeaderboardOpen(false);
+    setSettingsOpen(true);
+  };
+  const openLeaderboard = () => {
+    setSettingsOpen(false);
+    setHelpOpen(false);
+    setLeaderboardOpen(true);
+    refreshLeaderboard();
+  };
+  const openName = () => setNamePromptOpen(true);
+
   return (
-    <main
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100%",
-        maxHeight: "100dvh",
-        maxWidth: 900,
-        margin: "0 auto",
-        padding: "env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)",
-        boxSizing: "border-box",
-        overflow: "hidden",
-      }}
-    >
-      <header
+    <>
+      {/* Global temple background — fixed full-viewport so it covers regardless
+          of how wide the playing-mode <main> is capped to. */}
+      <div
+        aria-hidden="true"
         style={{
-          padding: "4px 8px 0",
-          letterSpacing: "0.12em",
-          fontSize: 12,
+          position: "fixed",
+          inset: 0,
+          backgroundImage: `url(${screen === "title" ? bgUkuPacha : bgDungeon})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          zIndex: 0,
+        }}
+      />
+      {/* Dark gradient overlay — keeps text/icons legible without crushing the
+          torchlit colors. Slightly heavier on the title to support the hero
+          headline. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          background:
+            screen === "title"
+              ? "linear-gradient(180deg, rgba(8,5,3,0.72) 0%, rgba(8,5,3,0.55) 35%, rgba(8,5,3,0.78) 100%)"
+              : "linear-gradient(180deg, rgba(8,5,3,0.55) 0%, rgba(8,5,3,0.40) 50%, rgba(8,5,3,0.65) 100%)",
+          zIndex: 0,
+        }}
+      />
+      <main
+        style={{
+          position: "relative",
+          zIndex: 1,
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexShrink: 0,
+          flexDirection: "column",
+          height: "100%",
+          maxHeight: "100dvh",
+          width: "100%",
+          maxWidth: screen === "title" ? "none" : 900,
+          margin: "0 auto",
+          padding:
+            "env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)",
+          boxSizing: "border-box",
+          overflow: "hidden",
+          color: COLORS.text,
+          fontFamily: FONTS.body,
         }}
       >
+        {screen === "title" ? (
+        <TitleScreen
+          playerName={playerName}
+          topRuns={topRunsForCards}
+          canContinue={canContinue}
+          onStart={startRun}
+          onOpenHelp={openHelp}
+          onOpenSettings={openSettings}
+          onOpenLeaderboard={openLeaderboard}
+          onOpenName={openName}
+        />
+      ) : (
+        <>
+          <PlayingHeader
+            floorIndex={floorIndex}
+            score={score}
+            onMenu={returnToMenu}
+            onSettings={openSettings}
+            onLeaderboard={openLeaderboard}
+            onHelp={openHelp}
+          />
+          <GridView
+            animSpeed={animSpeed}
+            legalMoveOpacity={legalMoveOpacity}
+            onMove={onGridMove}
+          />
+          <HUD
+            playerName={playerName}
+            onTryAgain={tryAgain}
+            onMainMenu={returnToMenu}
+          />
+        </>
+      )}
+
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+      {settingsOpen && (
+        <SettingsModal
+          animSpeed={animSpeed}
+          swipeSensitivity={swipeSensitivity}
+          legalMoveOpacity={legalMoveOpacity}
+          hapticsEnabled={hapticsEnabled}
+          playerName={playerName}
+          onClose={() => setSettingsOpen(false)}
+          onAnimSpeed={updateAnimSpeed}
+          onSwipe={updateSwipeSensitivity}
+          onLegalMoveOpacity={updateLegalMoveOpacity}
+          onHaptics={updateHapticsEnabled}
+          onEditName={() => setNamePromptOpen(true)}
+          onReset={resetSettings}
+          localeFlag={localeFlag}
+        />
+      )}
+      {leaderboardOpen && (
+        <LeaderboardModal
+          loading={leaderboardLoading}
+          error={leaderboardError}
+          entries={leaderboard}
+          configured={hasLeaderboardBackend()}
+          onClose={() => setLeaderboardOpen(false)}
+          onRefresh={refreshLeaderboard}
+        />
+      )}
+      {namePromptOpen && (
+        <NamePromptModal
+          draft={nameDraft}
+          onChange={setNameDraft}
+          onClose={() => setNamePromptOpen(false)}
+          onSave={savePlayerName}
+        />
+      )}
+      </main>
+    </>
+  );
+}
+
+function PlayingHeader({
+  floorIndex,
+  score,
+  onMenu,
+  onSettings,
+  onLeaderboard,
+  onHelp,
+}: {
+  floorIndex: number;
+  score: number;
+  onMenu: () => void;
+  onSettings: () => void;
+  onLeaderboard: () => void;
+  onHelp: () => void;
+}) {
+  return (
+    <header
+      style={{
+        padding: "8px 10px 6px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+        flexShrink: 0,
+        background: "rgba(14, 10, 8, 0.55)",
+        backdropFilter: "blur(8px) saturate(1.1)",
+        WebkitBackdropFilter: "blur(8px) saturate(1.1)",
+        borderBottom: `1px solid ${COLORS.borderSubtle}`,
+      }}
+    >
+      <button
+        onClick={onMenu}
+        title={t("runOver.menu")}
+        style={{
+          ...pixelChip,
+          padding: "6px 10px",
+          fontFamily: FONTS.body,
+          fontSize: 14,
+          letterSpacing: 0,
+        }}
+      >
+        ☰
+      </button>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+          fontFamily: FONTS.display,
+          fontSize: 9,
+          letterSpacing: "0.16em",
+        }}
+      >
+        <span>
+          <span style={{ color: COLORS.textMuted, marginRight: 6 }}>{t("hud.floorLabel")}</span>
+          {floorIndex + 1}
+        </span>
+        <span style={{ color: COLORS.heart }}>♥</span>
+        <span style={{ color: COLORS.text }}>{t("app.title")}</span>
+        <span style={{ color: COLORS.heart }}>♥</span>
+        <span>
+          <span style={{ color: COLORS.textMuted, marginRight: 6 }}>🏆</span>
+          {score}
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
         <button
-          onClick={() => setSettingsOpen(true)}
+          onClick={onLeaderboard}
+          title={t("header.leaderboardLabel")}
+          style={{
+            ...pixelChip,
+            padding: "6px 10px",
+            fontFamily: FONTS.body,
+            fontSize: 14,
+            letterSpacing: 0,
+          }}
+        >
+          🌎
+        </button>
+        <button
+          onClick={onHelp}
+          title={t("header.helpLabel")}
+          style={{
+            ...pixelChip,
+            padding: "6px 10px",
+            fontFamily: FONTS.body,
+            fontSize: 14,
+            letterSpacing: 0,
+          }}
+        >
+          📜
+        </button>
+        <button
+          onClick={onSettings}
           title={t("header.settingsLabel")}
           style={{
-            width: 34,
-            height: 22,
-            background: "transparent",
-            color: "#e9e7d8",
-            border: "1px solid #2a2a3e",
-            borderRadius: 6,
-            fontFamily: "inherit",
+            ...pixelChip,
+            padding: "6px 10px",
+            fontFamily: FONTS.body,
             fontSize: 14,
-            lineHeight: "20px",
-            cursor: "pointer",
-            opacity: 0.9,
+            letterSpacing: 0,
           }}
         >
-          ⚙️
+          ⚙
         </button>
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "baseline",
-            gap: 10,
-            pointerEvents: "none",
-          }}
-        >
-          <span style={{ letterSpacing: 0 }}>
-            {t("hud.floorLabel")}&nbsp;{floorIndex + 1}
-          </span>
-          <span>{t("app.title")}</span>
-          <span style={{ letterSpacing: 0 }}>{`🏆 ${score}`}</span>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button
-            onClick={() => {
-              setSettingsOpen(false);
-              setHelpOpen(false);
-              setLeaderboardOpen(true);
-              refreshLeaderboard();
-            }}
-            title={t("header.leaderboardLabel")}
-            style={{
-              width: 34,
-              height: 22,
-              background: "transparent",
-              color: "#e9e7d8",
-              border: "1px solid #2a2a3e",
-              borderRadius: 6,
-              fontFamily: "inherit",
-              fontSize: 14,
-              lineHeight: "20px",
-              cursor: "pointer",
-              opacity: 0.9,
-            }}
-          >
-            🌎
-          </button>
-          <button
-            onClick={() => setHelpOpen(true)}
-            title={t("header.helpLabel")}
-            style={{
-              width: 34,
-              height: 22,
-              background: "transparent",
-              color: "#e9e7d8",
-              border: "1px solid #2a2a3e",
-              borderRadius: 6,
-              fontFamily: "inherit",
-              fontSize: 14,
-              lineHeight: "20px",
-              cursor: "pointer",
-              opacity: 0.9,
-            }}
-          >
-            📜
-          </button>
-        </div>
-      </header>
-      <GridView animSpeed={animSpeed} onMove={onGridMove} />
-      <HUD playerName={playerName} />
+      </div>
+    </header>
+  );
+}
 
-      {helpOpen && (
-        <div
-          onClick={() => setHelpOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(11, 11, 20, 0.72)",
-            display: "grid",
-            placeItems: "center",
-            zIndex: 10,
-            padding: 16,
-            boxSizing: "border-box",
-          }}
-        >
+function ModalShell({
+  title,
+  onClose,
+  children,
+  width,
+  rightActions,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  width?: number | string;
+  rightActions?: React.ReactNode;
+}) {
+  return (
+    <div onClick={onClose} style={modalBackdrop}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          ...modalPanel,
+          width: width ?? "min(560px, 100%)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <div
-            onClick={(e) => e.stopPropagation()}
             style={{
-              width: "min(520px, 100%)",
-              background: "#11111c",
-              border: "1px solid #2a2a3e",
-              borderRadius: 10,
-              padding: "14px 14px 12px",
-              color: "#e9e7d8",
-              fontFamily: "ui-monospace, monospace",
-              letterSpacing: 0,
-              opacity: 0.98,
+              fontFamily: FONTS.display,
+              fontSize: 11,
+              letterSpacing: "0.16em",
+              color: COLORS.text,
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 700 }}>{t("help.title")}</div>
-              <button
-                onClick={() => setHelpOpen(false)}
-                style={{
-                  background: "transparent",
-                  color: "#e9e7d8",
-                  border: "1px solid #2a2a3e",
-                  borderRadius: 6,
-                  padding: "2px 8px",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: 12,
-                  lineHeight: "18px",
-                  opacity: 0.9,
-                }}
-              >
-                {t("help.close")}
-              </button>
-            </div>
-            <div
+            {title}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {rightActions}
+            <button
+              onClick={onClose}
               style={{
-                marginTop: 10,
-                fontSize: 12,
-                lineHeight: "18px",
-                opacity: 0.9,
-                maxHeight: "70dvh",
-                overflowY: "auto",
-                paddingRight: 4,
+                ...pixelChip,
+                fontFamily: FONTS.display,
+                fontSize: 8,
+                letterSpacing: "0.18em",
+                padding: "6px 10px",
               }}
             >
-              {HELP_SECTIONS.map((s) => (
-                <section key={s} style={{ marginBottom: 10 }}>
-                  {s === "lattices" ? (
-                    <details
-                      style={{
-                        border: "1px solid #2a2a3e",
-                        borderRadius: 8,
-                        padding: "6px 8px",
-                        background: "rgba(26, 26, 42, 0.25)",
-                      }}
-                    >
-                      <summary
-                        style={{
-                          fontWeight: 700,
-                          fontSize: 11,
-                          letterSpacing: 1,
-                          textTransform: "uppercase",
-                          opacity: 0.75,
-                          cursor: "pointer",
-                          listStyle: "none",
-                          outline: "none",
-                        }}
-                      >
-                        {t(`help.section.${s}.title`)}
-                        <span style={{ marginLeft: 8, opacity: 0.6, letterSpacing: 0, fontSize: 10 }}>
-                          {t("help.section.lattices.hint")}
-                        </span>
-                      </summary>
-                      <div style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>
-                        {t(`help.section.${s}.body`)}
-                      </div>
-                    </details>
-                  ) : (
-                    <>
-                      <div
-                        style={{
-                          fontWeight: 700,
-                          fontSize: 11,
-                          letterSpacing: 1,
-                          textTransform: "uppercase",
-                          opacity: 0.6,
-                          marginBottom: 3,
-                        }}
-                      >
-                        {t(`help.section.${s}.title`)}
-                      </div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>
-                        {t(`help.section.${s}.body`)}
-                      </div>
-                    </>
-                  )}
-                </section>
-              ))}
-            </div>
+              ✕ {t("settings.close")}
+            </button>
           </div>
         </div>
-      )}
+        <div style={{ marginTop: 12 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
 
-      {settingsOpen && (
-        <div
-          onClick={() => setSettingsOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(11, 11, 20, 0.72)",
-            display: "grid",
-            placeItems: "center",
-            zIndex: 11,
-            padding: 16,
-            boxSizing: "border-box",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "min(520px, 100%)",
-              background: "#11111c",
-              border: "1px solid #2a2a3e",
-              borderRadius: 10,
-              padding: "14px 14px 12px",
-              color: "#e9e7d8",
-              fontFamily: "ui-monospace, monospace",
-              letterSpacing: 0,
-              opacity: 0.98,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 700 }}>{t("settings.title")}</div>
-              <button
-                onClick={() => setSettingsOpen(false)}
+function HelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <ModalShell title={t("help.title")} onClose={onClose}>
+      <div
+        style={{
+          fontSize: 14,
+          lineHeight: 1.45,
+          color: COLORS.text,
+          maxHeight: "70dvh",
+          overflowY: "auto",
+          paddingRight: 4,
+        }}
+      >
+        {HELP_SECTIONS.map((s) => (
+          <section key={s} style={{ marginBottom: 14 }}>
+            {s === "lattices" ? (
+              <details
                 style={{
-                  background: "transparent",
-                  color: "#e9e7d8",
-                  border: "1px solid #2a2a3e",
-                  borderRadius: 6,
-                  padding: "2px 8px",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: 12,
-                  lineHeight: "18px",
-                  opacity: 0.9,
-                }}
-              >
-                {t("settings.close")}
-              </button>
-            </div>
-
-            <div style={{ marginTop: 10, display: "grid", gap: 10, fontSize: 12, lineHeight: "18px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ opacity: 0.85 }}>{t("settings.language")}</div>
-                <select
-                  value={getLocale()}
-                  onChange={(e) => setLocale(e.target.value as (typeof LOCALES)[number])}
-                  style={{
-                    background: "#11111c",
-                    color: "#e9e7d8",
-                    border: "1px solid #2a2a3e",
-                    borderRadius: 8,
-                    padding: "6px 8px",
-                    fontFamily: "inherit",
-                    fontSize: 12,
-                    cursor: "pointer",
-                  }}
-                >
-                  {LOCALES.map((loc) => (
-                    <option key={loc} value={loc}>
-                      {localeFlag(loc)} {loc.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ opacity: 0.85 }}>{t("settings.playerName")}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ opacity: 0.8, letterSpacing: 0 }}>{playerName.trim() || "Player"}</span>
-                  <button
-                    onClick={() => setNamePromptOpen(true)}
-                    style={{
-                      background: "transparent",
-                      color: "#e9e7d8",
-                      border: "1px solid #2a2a3e",
-                      borderRadius: 8,
-                      padding: "6px 8px",
-                      fontFamily: "inherit",
-                      fontSize: 12,
-                      cursor: "pointer",
-                      opacity: 0.95,
-                    }}
-                  >
-                    {t("settings.editName")}
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-                  <div style={{ opacity: 0.85 }}>{t("settings.animSpeed")}</div>
-                  <div style={{ opacity: 0.7, letterSpacing: 0 }}>{animSpeed.toFixed(2)}</div>
-                </div>
-                <input
-                  type="range"
-                  min={0.2}
-                  max={2}
-                  step={0.05}
-                  value={animSpeed}
-                  onChange={(e) => updateAnimSpeed(Number(e.target.value))}
-                  style={{ width: "100%" }}
-                />
-              </div>
-
-              <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-                  <div style={{ opacity: 0.85 }}>{t("settings.swipeSensitivity")}</div>
-                  <div style={{ opacity: 0.7, letterSpacing: 0 }}>{swipeSensitivity.toFixed(2)}</div>
-                </div>
-                <input
-                  type="range"
-                  min={0.5}
-                  max={2}
-                  step={0.05}
-                  value={swipeSensitivity}
-                  onChange={(e) => updateSwipeSensitivity(Number(e.target.value))}
-                  style={{ width: "100%" }}
-                />
-              </div>
-
-              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={hapticsEnabled}
-                  onChange={(e) => updateHapticsEnabled(e.target.checked)}
-                />
-                <span style={{ opacity: 0.85 }}>{t("settings.haptics")}</span>
-              </label>
-
-              <button
-                onClick={resetSettings}
-                style={{
-                  marginTop: 6,
-                  background: "transparent",
-                  color: "#e9e7d8",
-                  border: "1px solid #2a2a3e",
-                  borderRadius: 10,
+                  ...pixelBorder(COLORS.borderSubtle, 1),
                   padding: "8px 10px",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: 12,
-                  opacity: 0.9,
+                  background: "rgba(7, 4, 16, 0.45)",
                 }}
               >
-                {t("settings.reset")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {leaderboardOpen && (
-        <div
-          onClick={() => setLeaderboardOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(11, 11, 20, 0.72)",
-            display: "grid",
-            placeItems: "center",
-            zIndex: 11,
-            padding: 16,
-            boxSizing: "border-box",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: "min(520px, 100%)",
-              background: "#11111c",
-              border: "1px solid #2a2a3e",
-              borderRadius: 10,
-              padding: "14px 14px 12px",
-              color: "#e9e7d8",
-              fontFamily: "ui-monospace, monospace",
-              letterSpacing: 0,
-              opacity: 0.98,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 700 }}>{t("leaderboard.title")}</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                {hasLeaderboardBackend() && (
-                  <button
-                    onClick={refreshLeaderboard}
-                    style={{
-                      background: "transparent",
-                      color: "#e9e7d8",
-                      border: "1px solid #2a2a3e",
-                      borderRadius: 6,
-                      padding: "2px 8px",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      fontSize: 12,
-                      lineHeight: "18px",
-                      opacity: 0.9,
-                    }}
-                  >
-                    {t("leaderboard.refresh")}
-                  </button>
-                )}
-                <button
-                  onClick={() => setLeaderboardOpen(false)}
+                <summary
                   style={{
-                    background: "transparent",
-                    color: "#e9e7d8",
-                    border: "1px solid #2a2a3e",
-                    borderRadius: 6,
-                    padding: "2px 8px",
+                    ...sectionLabel,
                     cursor: "pointer",
-                    fontFamily: "inherit",
-                    fontSize: 12,
-                    lineHeight: "18px",
-                    opacity: 0.9,
+                    listStyle: "none",
+                    outline: "none",
                   }}
                 >
-                  {t("settings.close")}
-                </button>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 10, display: "grid", gap: 8, fontSize: 12, lineHeight: "18px" }}>
-              {!hasLeaderboardBackend() ? (
-                <div style={{ opacity: 0.75 }}>{t("settings.leaderboardNotConfigured")}</div>
-              ) : leaderboardLoading ? (
-                <div style={{ opacity: 0.75 }}>{t("settings.leaderboardLoading")}</div>
-              ) : leaderboardError ? (
-                <div style={{ opacity: 0.75 }}>{t("settings.leaderboardError")}</div>
-              ) : leaderboard.length === 0 ? (
-                <div style={{ opacity: 0.75 }}>{t("settings.leaderboardEmpty")}</div>
-              ) : (
-                <div style={{ display: "grid", gap: 6 }}>
-                  {leaderboard.slice(0, 20).map((e, idx) => (
-                    <div
-                      key={`${e.ts}-${e.seed}`}
-                      style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12 }}
-                    >
-                      <span style={{ opacity: 0.9 }}>{`${idx + 1}. ${e.name}`}</span>
-                      <span style={{ opacity: 0.8, letterSpacing: 0 }}>
-                        {`🏆 ${e.score} · ${t("hud.floorLabel")} ${e.floor}`}
-                      </span>
-                    </div>
-                  ))}
+                  {t(`help.section.${s}.title`)}
+                  <span style={{ marginLeft: 8, opacity: 0.6, fontSize: 11 }}>
+                    {t("help.section.lattices.hint")}
+                  </span>
+                </summary>
+                <div style={{ whiteSpace: "pre-wrap", marginTop: 8, color: COLORS.text }}>
+                  {t(`help.section.${s}.body`)}
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+              </details>
+            ) : (
+              <>
+                <div style={{ ...sectionLabel, marginBottom: 6 }}>{t(`help.section.${s}.title`)}</div>
+                <div style={{ whiteSpace: "pre-wrap" }}>{t(`help.section.${s}.body`)}</div>
+              </>
+            )}
+          </section>
+        ))}
+      </div>
+    </ModalShell>
+  );
+}
 
-      {namePromptOpen && (
-        <div
-          onClick={() => setNamePromptOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(11, 11, 20, 0.72)",
-            display: "grid",
-            placeItems: "center",
-            zIndex: 12,
-            padding: 16,
-            boxSizing: "border-box",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
+function SettingsModal({
+  animSpeed,
+  swipeSensitivity,
+  legalMoveOpacity,
+  hapticsEnabled,
+  playerName,
+  onClose,
+  onAnimSpeed,
+  onSwipe,
+  onLegalMoveOpacity,
+  onHaptics,
+  onEditName,
+  onReset,
+  localeFlag,
+}: {
+  animSpeed: number;
+  swipeSensitivity: number;
+  legalMoveOpacity: number;
+  hapticsEnabled: boolean;
+  playerName: string;
+  onClose: () => void;
+  onAnimSpeed: (v: number) => void;
+  onSwipe: (v: number) => void;
+  onLegalMoveOpacity: (v: number) => void;
+  onHaptics: (v: boolean) => void;
+  onEditName: () => void;
+  onReset: () => void;
+  localeFlag: (l: ReturnType<typeof getLocale>) => string;
+}) {
+  return (
+    <ModalShell title={t("settings.title")} onClose={onClose}>
+      <div style={{ display: "grid", gap: 14, fontSize: 14, lineHeight: 1.45 }}>
+        <SettingRow label={t("settings.language")}>
+          <select
+            value={getLocale()}
+            onChange={(e) => setLocale(e.target.value as (typeof LOCALES)[number])}
             style={{
-              width: "min(420px, 100%)",
-              background: "#11111c",
-              border: "1px solid #2a2a3e",
-              borderRadius: 10,
-              padding: "14px 14px 12px",
-              color: "#e9e7d8",
-              fontFamily: "ui-monospace, monospace",
-              letterSpacing: 0,
-              opacity: 0.98,
+              background: COLORS.bgSunkenSolid,
+              color: COLORS.text,
+              ...pixelBorder(COLORS.borderSubtle, 1),
+              padding: "6px 10px",
+              fontFamily: FONTS.body,
+              fontSize: 14,
+              cursor: "pointer",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontWeight: 700 }}>{t("namePrompt.title")}</div>
-              <button
-                onClick={() => setNamePromptOpen(false)}
-                style={{
-                  background: "transparent",
-                  color: "#e9e7d8",
-                  border: "1px solid #2a2a3e",
-                  borderRadius: 6,
-                  padding: "2px 8px",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: 12,
-                  lineHeight: "18px",
-                  opacity: 0.9,
-                }}
-              >
-                {t("settings.close")}
-              </button>
-            </div>
+            {LOCALES.map((loc) => (
+              <option key={loc} value={loc}>
+                {localeFlag(loc)} {loc.toUpperCase()}
+              </option>
+            ))}
+          </select>
+        </SettingRow>
 
-            <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-              <input
-                value={nameDraft}
-                onChange={(e) => setNameDraft(e.target.value)}
-                placeholder={t("namePrompt.placeholder")}
-                autoFocus
-                style={{
-                  width: "100%",
-                  background: "#0b0b14",
-                  color: "#e9e7d8",
-                  border: "1px solid #2a2a3e",
-                  borderRadius: 10,
-                  padding: "10px 10px",
-                  fontFamily: "inherit",
-                  fontSize: 14,
-                  boxSizing: "border-box",
-                }}
-              />
-              <button
-                onClick={() => savePlayerName(nameDraft)}
-                style={{
-                  background: "#2a2a3e",
-                  color: "#e9e7d8",
-                  border: "1px solid #2a2a3e",
-                  borderRadius: 10,
-                  padding: "10px 12px",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  fontSize: 14,
-                  letterSpacing: "0.06em",
-                  opacity: 0.95,
-                }}
-              >
-                {t("namePrompt.save")}
-              </button>
-            </div>
+        <SettingRow label={t("settings.playerName")}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: COLORS.textMuted }}>{playerName.trim() || "Player"}</span>
+            <button onClick={onEditName} style={{ ...pixelButtonGhost, padding: "5px 10px", fontSize: 12 }}>
+              {t("settings.editName")}
+            </button>
           </div>
-        </div>
-      )}
-    </main>
+        </SettingRow>
+
+        <SliderRow
+          label={t("settings.animSpeed")}
+          value={animSpeed}
+          min={0.2}
+          max={2}
+          step={0.05}
+          onChange={onAnimSpeed}
+        />
+        <SliderRow
+          label={t("settings.swipeSensitivity")}
+          value={swipeSensitivity}
+          min={0.5}
+          max={2}
+          step={0.05}
+          onChange={onSwipe}
+        />
+        <SliderRow
+          label={t("settings.legalMoveOpacity")}
+          value={legalMoveOpacity}
+          min={0.05}
+          max={1}
+          step={0.05}
+          onChange={onLegalMoveOpacity}
+        />
+
+        <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={hapticsEnabled}
+            onChange={(e) => onHaptics(e.target.checked)}
+          />
+          <span style={{ color: COLORS.textMuted }}>{t("settings.haptics")}</span>
+        </label>
+
+        <button
+          onClick={onReset}
+          style={{ ...pixelButtonGhost, marginTop: 6, padding: "10px 12px", fontSize: 13 }}
+        >
+          {t("settings.reset")}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+      <div style={{ ...sectionLabel, color: COLORS.text }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <div style={{ ...sectionLabel, color: COLORS.text }}>{label}</div>
+        <div style={{ color: COLORS.textMuted, fontFamily: FONTS.mono }}>{value.toFixed(2)}</div>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ width: "100%", accentColor: COLORS.primary }}
+      />
+    </div>
+  );
+}
+
+function LeaderboardModal({
+  loading,
+  error,
+  entries,
+  configured,
+  onClose,
+  onRefresh,
+}: {
+  loading: boolean;
+  error: string | null;
+  entries: LeaderboardEntry[];
+  configured: boolean;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const refreshAction = configured ? (
+    <button
+      onClick={onRefresh}
+      style={{
+        ...pixelChip,
+        fontFamily: FONTS.display,
+        fontSize: 8,
+        letterSpacing: "0.18em",
+        padding: "6px 10px",
+      }}
+    >
+      ⟳ {t("leaderboard.refresh")}
+    </button>
+  ) : undefined;
+
+  return (
+    <ModalShell title={t("leaderboard.title")} onClose={onClose} rightActions={refreshAction}>
+      <div style={{ display: "grid", gap: 10, fontSize: 14, lineHeight: 1.45 }}>
+        {!configured ? (
+          <div style={{ color: COLORS.textMuted }}>{t("settings.leaderboardNotConfigured")}</div>
+        ) : loading ? (
+          <div style={{ color: COLORS.textMuted }}>{t("settings.leaderboardLoading")}</div>
+        ) : error ? (
+          <div style={{ color: COLORS.death }}>{t("settings.leaderboardError")}</div>
+        ) : entries.length === 0 ? (
+          <div style={{ color: COLORS.textMuted }}>{t("settings.leaderboardEmpty")}</div>
+        ) : (
+          <div style={{ display: "grid", gap: 6 }}>
+            {entries.slice(0, 20).map((e, idx) => {
+              const isPodium = idx < 3;
+              const podiumColor = idx === 0 ? COLORS.win : idx === 1 ? COLORS.text : COLORS.heart;
+              return (
+                <div
+                  key={`${e.ts}-${e.seed}-${idx}`}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "32px 1fr auto",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "6px 10px",
+                    background: isPodium ? "rgba(255, 52, 100, 0.08)" : "rgba(255, 255, 255, 0.02)",
+                    ...pixelBorder(isPodium ? podiumColor : COLORS.borderDim, 1),
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: FONTS.display,
+                      fontSize: 10,
+                      color: isPodium ? podiumColor : COLORS.textMuted,
+                    }}
+                  >
+                    #{idx + 1}
+                  </div>
+                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
+                  <div style={{ fontFamily: FONTS.mono, color: COLORS.textMuted, fontSize: 13 }}>
+                    🏆 {e.score} · {t("hud.floorLabel")} {e.floor}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </ModalShell>
+  );
+}
+
+function NamePromptModal({
+  draft,
+  onChange,
+  onClose,
+  onSave,
+}: {
+  draft: string;
+  onChange: (v: string) => void;
+  onClose: () => void;
+  onSave: (v: string) => void;
+}) {
+  return (
+    <ModalShell title={t("namePrompt.title")} onClose={onClose} width="min(420px, 100%)">
+      <div style={{ display: "grid", gap: 12 }}>
+        <input
+          value={draft}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={t("namePrompt.placeholder")}
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSave(draft);
+          }}
+          style={{
+            width: "100%",
+            background: COLORS.bgSunkenSolid,
+            color: COLORS.text,
+            ...pixelBorder(COLORS.borderSubtle, 1),
+            padding: "10px 12px",
+            fontFamily: FONTS.body,
+            fontSize: 16,
+            boxSizing: "border-box",
+          }}
+        />
+        <button
+          onClick={() => onSave(draft)}
+          style={{ ...pixelButtonPrimary, fontSize: 11 }}
+        >
+          ♥ {t("namePrompt.save")}
+        </button>
+      </div>
+    </ModalShell>
   );
 }

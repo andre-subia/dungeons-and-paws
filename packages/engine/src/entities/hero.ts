@@ -8,7 +8,6 @@ export type HeroState = {
   readonly level: number;
   readonly xp: number;
   readonly potions: number;
-  readonly potionsMax: number;
   readonly brambleProgress: number;
   readonly stride: number;
   readonly attack: number;
@@ -75,7 +74,6 @@ export function spawnHero(template: HeroTemplate, position: Cell): HeroState {
     level: 1,
     xp: 0,
     potions: 2,
-    potionsMax: 2,
     brambleProgress: 0,
     stride: template.stride,
     attack: template.attack,

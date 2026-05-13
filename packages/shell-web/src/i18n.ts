@@ -23,6 +23,7 @@ const DICTS: Record<Locale, Dict> = {
     "settings.language": "Language",
     "settings.animSpeed": "Animation speed",
     "settings.swipeSensitivity": "Swipe sensitivity",
+    "settings.legalMoveOpacity": "Move-hint opacity",
     "settings.playerName": "Player name",
     "settings.editName": "Edit",
     "settings.haptics": "Haptics",
@@ -56,7 +57,7 @@ const DICTS: Record<Locale, Dict> = {
       "🛡 Armor — absorbs damage before HP\n" +
       "↑ Level/XP — gain XP from runes and kills; leveling raises ♥ max HP\n" +
       "🎒 Bag — open your items (🪙 coins, 🌿 leaves, 🧪 potions)\n" +
-      "🧪 Potions — heal 5 ♥ (gain 1 every 3 🌿 leaves, max 2)\n" +
+      "🧪 Potions — heal 5 ♥ (gain 1 every 3 🌿 leaves)\n" +
       "◆ Focus — saved for future abilities\n" +
       "🪙 Gold — saved for future shops",
     "help.section.runes.title": "RUNES (consumed when stepped on)",
@@ -119,7 +120,7 @@ const DICTS: Record<Locale, Dict> = {
     "help.section.tips.body":
       "Stack 🦴 Bone and 💧 Tide for healing.\n" +
       "⚙️ Iron armor turns scary fights into manageable ones.\n" +
-      "🌿 Bramble: every 3 consumed → +1 🧪 potion (up to your max).\n" +
+      "🌿 Bramble: every 3 consumed → +1 🧪 potion.\n" +
       "Level up to increase ♥ max HP.\n" +
       "When the exit needs a 🔑, look for the enemy marked with 🔑.",
     "hud.newRun": "new run",
@@ -133,7 +134,7 @@ const DICTS: Record<Locale, Dict> = {
     "inventory.close": "Close",
     "inventory.leaf": "Leaf",
     "inventory.potion": "Potion",
-    "inventory.potionHint": "🧪 {potions}/{max}",
+    "inventory.potionHint": "🧪 {potions}",
     "inventory.coins": "Coins",
     "hud.rowsAbbr": "R",
     "hud.colsAbbr": "C",
@@ -160,8 +161,8 @@ const DICTS: Record<Locale, Dict> = {
     "event.keystoneBonus.bone": "⚡ Bone bind — +{hp} HP",
     "event.keystoneBonus.iron": "⚡ Iron oath — +{armor} armor",
     "event.keystoneBonus.ember": "⚡ Ember flare — +{atk} attack (now {total})",
-    "event.keystoneBonus.bramble": "⚡ Bramble brew — +1 potion ({potions}/{max})",
-    "event.keystoneBonus.brambleFull": "⚡ Bramble brew — potions full ({max})",
+    "event.keystoneBonus.bramble": "⚡ Bramble brew — +1 potion ({potions})",
+    "event.keystoneBonus.brambleFull": "⚡ Bramble brew — potions full",
     "event.keystoneBonus.star": "⚡ Star insight — +{xp} XP (lvl {level})",
     "event.keystoneBonus.void": "⚡ Void step — stride {stride}",
     "event.keystoneBonus.blood": "⚡ Blood pact — ♥ max {hpMax} (+{healed} HP)",
@@ -177,8 +178,8 @@ const DICTS: Record<Locale, Dict> = {
     "event.enemyKilled": "✗ enemy slain",
     "event.heroDamaged": "! you took {amount}",
     "event.heroLeveledUp": "↑ level {level} · ♥ max {hpMax}",
-    "event.potionGained": "🧪 potion +1 ({potions}/{max})",
-    "event.potionUsed": "🧪 used +{healed} ♥ ({potions}/{max})",
+    "event.potionGained": "🧪 potion +1 ({potions})",
+    "event.potionUsed": "🧪 used +{healed} ♥ ({potions})",
     "event.keyDropped": "🔑 key dropped",
     "event.keyCollected": "🔑 key collected",
     "event.heroDied": "☠ you died",
@@ -208,6 +209,43 @@ const DICTS: Record<Locale, Dict> = {
     "rune.void": "void",
     "rune.coin": "coin",
     "rune.blood": "blood",
+
+    "title.tagline": "A ROGUELIKE WITH REAL CLAWS",
+    "title.crest": "MADE FOR CATS · BUILT FOR HUMANS",
+    "title.flowey1": "A new dungeon awaits, paw-sapien.",
+    "title.flowey2": "Let's go.",
+    "title.heroLine1": "EVERY",
+    "title.heroLine2": "DUNGEON",
+    "title.heroLine3": "HAS A NEW",
+    "title.heroLine4": "STORY",
+    "title.subtitle": "MOVE. MATCH. OUTSMART.\nSURVIVE DEEPER.",
+    "title.cta": "ENTER THE DUNGEON",
+    "title.ctaNote": "ONE LIFE.\nONE SCORE. NO MERCY.",
+    "title.feature.realRuns.title": "REAL RUNS",
+    "title.feature.realRuns.body": "No save points. Each death is final.",
+    "title.feature.lattices.title": "LATTICES",
+    "title.feature.lattices.body": "Charge rows, columns, and chambers to bend fate.",
+    "title.feature.builtForLoss.title": "BUILT FOR LOSS",
+    "title.feature.builtForLoss.body": "You will die. That's the point. Try again.",
+    "title.sansLine1": "* you never know what's behind",
+    "title.sansLine2": "* the next door.",
+    "title.bottomLeft": "GRIDS AREN'T RANDOM. THEY'RE FATE.",
+    "title.bottomRight": "READY, KITTEN?",
+    "title.runsHeader": "TOP CATS",
+    "title.runsEmpty": "Be the first to leave a paw print.",
+    "title.menuHelp": "HOW TO PLAY",
+    "title.menuSettings": "SETTINGS",
+    "title.menuLeaderboard": "LEADERBOARD",
+    "title.continue": "CONTINUE RUN",
+    "runOver.title": "RUN ENDED",
+    "runOver.death": "YOUR PAW HAS BEEN STILLED",
+    "runOver.win": "YOU FOUND THE WAY OUT",
+    "runOver.statFloor": "DEEPEST FLOOR",
+    "runOver.statScore": "FINAL SCORE",
+    "runOver.statTurn": "TURNS",
+    "runOver.statLevel": "LEVEL",
+    "runOver.again": "TRY AGAIN",
+    "runOver.menu": "MAIN MENU",
   },
   es: {
     "app.title": "DUNGEON AND PAWS",
@@ -224,6 +262,7 @@ const DICTS: Record<Locale, Dict> = {
     "settings.language": "Idioma",
     "settings.animSpeed": "Velocidad de animación",
     "settings.swipeSensitivity": "Sensibilidad del swipe",
+    "settings.legalMoveOpacity": "Opacidad de pista de movimiento",
     "settings.playerName": "Nombre",
     "settings.editName": "Editar",
     "settings.haptics": "Haptic",
@@ -257,7 +296,7 @@ const DICTS: Record<Locale, Dict> = {
       "🛡 Armadura — absorbe daño antes que el HP\n" +
       "↑ Nivel/EXP — ganas EXP por runas y bajas; subir aumenta tu ♥ HP máximo\n" +
       "🎒 Mochila — abre tus objetos (🪙 monedas, 🌿 hojas, 🧪 pociones)\n" +
-      "🧪 Pociones — curan 5 ♥ (ganas 1 cada 3 🌿 hojas, máximo 2)\n" +
+      "🧪 Pociones — curan 5 ♥ (ganas 1 cada 3 🌿 hojas)\n" +
       "◆ Foco — reservado para habilidades futuras\n" +
       "🪙 Oro — reservado para tiendas futuras",
     "help.section.runes.title": "RUNAS (se consumen al pisar)",
@@ -320,7 +359,7 @@ const DICTS: Record<Locale, Dict> = {
     "help.section.tips.body":
       "Acumula runas 🦴 y 💧 para curarte.\n" +
       "⚙️ La armadura de Hierro convierte peleas difíciles en manejables.\n" +
-      "🌿 Zarza: cada 3 consumidas → +1 🧪 poción (hasta tu máximo).\n" +
+      "🌿 Zarza: cada 3 consumidas → +1 🧪 poción.\n" +
       "Sube de nivel para aumentar tu ♥ HP máximo.\n" +
       "Si la salida pide 🔑, busca al enemigo marcado con 🔑.",
     "hud.newRun": "nueva partida",
@@ -334,7 +373,7 @@ const DICTS: Record<Locale, Dict> = {
     "inventory.close": "Cerrar",
     "inventory.leaf": "Hoja",
     "inventory.potion": "Poción",
-    "inventory.potionHint": "🧪 {potions}/{max}",
+    "inventory.potionHint": "🧪 {potions}",
     "inventory.coins": "Monedas",
     "hud.rowsAbbr": "F",
     "hud.colsAbbr": "C",
@@ -361,8 +400,8 @@ const DICTS: Record<Locale, Dict> = {
     "event.keystoneBonus.bone": "⚡ Atadura — +{hp} HP",
     "event.keystoneBonus.iron": "⚡ Juramento — +{armor} armadura",
     "event.keystoneBonus.ember": "⚡ Ascua — +{atk} ⚔ ataque (ahora {total})",
-    "event.keystoneBonus.bramble": "⚡ Zarza — +1 🧪 poción ({potions}/{max})",
-    "event.keystoneBonus.brambleFull": "⚡ Zarza — pociones llenas ({max})",
+    "event.keystoneBonus.bramble": "⚡ Zarza — +1 🧪 poción ({potions})",
+    "event.keystoneBonus.brambleFull": "⚡ Zarza — pociones llenas",
     "event.keystoneBonus.star": "⚡ Estrella — +{xp} EXP (nivel {level})",
     "event.keystoneBonus.void": "⚡ Vacío — paso {stride}",
     "event.keystoneBonus.blood": "⚡ Sangre — ♥ máx {hpMax} (+{healed} ♥)",
@@ -378,8 +417,8 @@ const DICTS: Record<Locale, Dict> = {
     "event.enemyKilled": "✗ enemigo derrotado",
     "event.heroDamaged": "! recibiste {amount}",
     "event.heroLeveledUp": "↑ nivel {level} · ♥ máx {hpMax}",
-    "event.potionGained": "🧪 poción +1 ({potions}/{max})",
-    "event.potionUsed": "🧪 usada +{healed} ♥ ({potions}/{max})",
+    "event.potionGained": "🧪 poción +1 ({potions})",
+    "event.potionUsed": "🧪 usada +{healed} ♥ ({potions})",
     "event.keyDropped": "🔑 llave cayó",
     "event.keyCollected": "🔑 llave recogida",
     "event.heroDied": "☠ has muerto",
@@ -409,6 +448,43 @@ const DICTS: Record<Locale, Dict> = {
     "rune.void": "vacío",
     "rune.coin": "moneda",
     "rune.blood": "sangre",
+
+    "title.tagline": "UN ROGUELIKE CON GARRAS DE VERDAD",
+    "title.crest": "HECHO PARA GATOS · CONSTRUIDO PARA HUMANOS",
+    "title.flowey1": "Un nuevo dungeon te espera, michi.",
+    "title.flowey2": "Vamos.",
+    "title.heroLine1": "CADA",
+    "title.heroLine2": "DUNGEON",
+    "title.heroLine3": "TIENE UNA",
+    "title.heroLine4": "HISTORIA",
+    "title.subtitle": "MUEVE. CAZA. PIENSA.\nSOBREVIVE MÁS HONDO.",
+    "title.cta": "ENTRAR AL DUNGEON",
+    "title.ctaNote": "UNA VIDA.\nUN PUNTAJE. SIN PIEDAD.",
+    "title.feature.realRuns.title": "PARTIDAS REALES",
+    "title.feature.realRuns.body": "Sin guardado. Cada muerte es final.",
+    "title.feature.lattices.title": "LATTICES",
+    "title.feature.lattices.body": "Carga filas, columnas y cámaras para torcer el destino.",
+    "title.feature.builtForLoss.title": "HECHO PARA PERDER",
+    "title.feature.builtForLoss.body": "Vas a morir. Ese es el punto. Vuelve a intentar.",
+    "title.sansLine1": "* nunca sabes qué hay tras",
+    "title.sansLine2": "* la próxima puerta.",
+    "title.bottomLeft": "EL TABLERO NO ES AZAR. ES DESTINO.",
+    "title.bottomRight": "¿LISTA, MICHI?",
+    "title.runsHeader": "TOP MICHIS",
+    "title.runsEmpty": "Sé la primera huella en el ranking.",
+    "title.menuHelp": "CÓMO JUGAR",
+    "title.menuSettings": "AJUSTES",
+    "title.menuLeaderboard": "RANKING",
+    "title.continue": "CONTINUAR PARTIDA",
+    "runOver.title": "PARTIDA TERMINADA",
+    "runOver.death": "TU PATA SE HA DETENIDO",
+    "runOver.win": "ENCONTRASTE LA SALIDA",
+    "runOver.statFloor": "PISO MÁS PROFUNDO",
+    "runOver.statScore": "PUNTAJE FINAL",
+    "runOver.statTurn": "TURNOS",
+    "runOver.statLevel": "NIVEL",
+    "runOver.again": "REINTENTAR",
+    "runOver.menu": "MENÚ PRINCIPAL",
   },
   pt: {
     "app.title": "DUNGEON AND PAWS",
@@ -425,6 +501,7 @@ const DICTS: Record<Locale, Dict> = {
     "settings.language": "Idioma",
     "settings.animSpeed": "Velocidade da animação",
     "settings.swipeSensitivity": "Sensibilidade do swipe",
+    "settings.legalMoveOpacity": "Opacidade da dica de movimento",
     "settings.playerName": "Nome",
     "settings.editName": "Editar",
     "settings.haptics": "Haptic",
@@ -458,7 +535,7 @@ const DICTS: Record<Locale, Dict> = {
       "🛡 Armadura — absorve dano antes do HP\n" +
       "↑ Nível/EXP — ganha EXP por runas e abates; subir aumenta o ♥ HP máximo\n" +
       "🎒 Mochila — abre seus itens (🪙 moedas, 🌿 folhas, 🧪 poções)\n" +
-      "🧪 Poções — curam 5 ♥ (ganha 1 a cada 3 🌿 folhas, máximo 2)\n" +
+      "🧪 Poções — curam 5 ♥ (ganha 1 a cada 3 🌿 folhas)\n" +
       "◆ Foco — reservado para habilidades futuras\n" +
       "🪙 Ouro — reservado para lojas futuras",
     "help.section.runes.title": "RUNAS (consumidas ao pisar)",
@@ -521,7 +598,7 @@ const DICTS: Record<Locale, Dict> = {
     "help.section.tips.body":
       "Acumule runas 🦴 e 💧 para curar.\n" +
       "⚙️ A armadura de Ferro transforma lutas difíceis em algo gerenciável.\n" +
-      "🌿 Espinho: a cada 3 consumidos → +1 🧪 poção (até o máximo).\n" +
+      "🌿 Espinho: a cada 3 consumidos → +1 🧪 poção.\n" +
       "Suba de nível para aumentar o ♥ HP máximo.\n" +
       "Se a saída pedir 🔑, procure o inimigo marcado com 🔑.",
     "hud.newRun": "novo jogo",
@@ -535,7 +612,7 @@ const DICTS: Record<Locale, Dict> = {
     "inventory.close": "Fechar",
     "inventory.leaf": "Folha",
     "inventory.potion": "Poção",
-    "inventory.potionHint": "🧪 {potions}/{max}",
+    "inventory.potionHint": "🧪 {potions}",
     "inventory.coins": "Moedas",
     "hud.rowsAbbr": "L",
     "hud.colsAbbr": "C",
@@ -562,8 +639,8 @@ const DICTS: Record<Locale, Dict> = {
     "event.keystoneBonus.bone": "⚡ Ossos — +{hp} HP",
     "event.keystoneBonus.iron": "⚡ Ferro — +{armor} armadura",
     "event.keystoneBonus.ember": "⚡ Brasa — +{atk} ⚔ ataque (agora {total})",
-    "event.keystoneBonus.bramble": "⚡ Espinho — +1 🧪 poção ({potions}/{max})",
-    "event.keystoneBonus.brambleFull": "⚡ Espinho — poções cheias ({max})",
+    "event.keystoneBonus.bramble": "⚡ Espinho — +1 🧪 poção ({potions})",
+    "event.keystoneBonus.brambleFull": "⚡ Espinho — poções cheias",
     "event.keystoneBonus.star": "⚡ Estrela — +{xp} EXP (nível {level})",
     "event.keystoneBonus.void": "⚡ Vazio — passo {stride}",
     "event.keystoneBonus.blood": "⚡ Sangue — ♥ máx {hpMax} (+{healed} ♥)",
@@ -579,8 +656,8 @@ const DICTS: Record<Locale, Dict> = {
     "event.enemyKilled": "✗ inimigo derrotado",
     "event.heroDamaged": "! você levou {amount}",
     "event.heroLeveledUp": "↑ nível {level} · ♥ máx {hpMax}",
-    "event.potionGained": "🧪 poção +1 ({potions}/{max})",
-    "event.potionUsed": "🧪 usada +{healed} ♥ ({potions}/{max})",
+    "event.potionGained": "🧪 poção +1 ({potions})",
+    "event.potionUsed": "🧪 usada +{healed} ♥ ({potions})",
     "event.keyDropped": "🔑 chave caiu",
     "event.keyCollected": "🔑 chave coletada",
     "event.heroDied": "☠ você morreu",
@@ -610,6 +687,43 @@ const DICTS: Record<Locale, Dict> = {
     "rune.void": "vazio",
     "rune.coin": "moeda",
     "rune.blood": "sangue",
+
+    "title.tagline": "UM ROGUELIKE COM GARRAS DE VERDADE",
+    "title.crest": "FEITO PARA GATOS · CONSTRUÍDO PARA HUMANOS",
+    "title.flowey1": "Um novo dungeon espera, gatuno.",
+    "title.flowey2": "Vamos.",
+    "title.heroLine1": "CADA",
+    "title.heroLine2": "DUNGEON",
+    "title.heroLine3": "TEM UMA",
+    "title.heroLine4": "HISTÓRIA",
+    "title.subtitle": "MOVA. CACE. PENSE.\nSOBREVIVA MAIS FUNDO.",
+    "title.cta": "ENTRAR NO DUNGEON",
+    "title.ctaNote": "UMA VIDA.\nUM PLACAR. SEM DÓ.",
+    "title.feature.realRuns.title": "PARTIDAS REAIS",
+    "title.feature.realRuns.body": "Sem save. Cada morte é final.",
+    "title.feature.lattices.title": "LATTICES",
+    "title.feature.lattices.body": "Carregue linhas, colunas e câmaras para dobrar o destino.",
+    "title.feature.builtForLoss.title": "FEITO PRA PERDER",
+    "title.feature.builtForLoss.body": "Você vai morrer. Esse é o ponto. Tente de novo.",
+    "title.sansLine1": "* você nunca sabe o que tem",
+    "title.sansLine2": "* atrás da próxima porta.",
+    "title.bottomLeft": "O TABULEIRO NÃO É SORTE. É DESTINO.",
+    "title.bottomRight": "PRONTO, GATUNO?",
+    "title.runsHeader": "TOP GATOS",
+    "title.runsEmpty": "Seja a primeira pegada no ranking.",
+    "title.menuHelp": "COMO JOGAR",
+    "title.menuSettings": "AJUSTES",
+    "title.menuLeaderboard": "RANKING",
+    "title.continue": "CONTINUAR PARTIDA",
+    "runOver.title": "PARTIDA ENCERRADA",
+    "runOver.death": "SUA PATA PAROU",
+    "runOver.win": "VOCÊ ACHOU A SAÍDA",
+    "runOver.statFloor": "ANDAR MAIS FUNDO",
+    "runOver.statScore": "PONTUAÇÃO FINAL",
+    "runOver.statTurn": "TURNOS",
+    "runOver.statLevel": "NÍVEL",
+    "runOver.again": "TENTAR DE NOVO",
+    "runOver.menu": "MENU PRINCIPAL",
   },
 };
 

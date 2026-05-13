@@ -1,28 +1,42 @@
 import type { Rune } from "@gridlore/engine";
 
+/**
+ * Pixi grid palette tuned to the Uku Pacha temple background.
+ * The Pixi canvas is rendered with a transparent background — the temple
+ * scene shows through the gaps between cards and through the cards' own
+ * translucent stone fills. Borders are copper, the selected/exit frames
+ * are torchlight amber, and the magical accent (legal-move, charged
+ * lattice) is rune cyan to echo the glowing glyphs on the temple floor.
+ */
 export const COLORS = {
-  bg: 0x0b0b14,
-  cellEmpty: 0x232333,
-  cellHover: 0x2c2c40,
-  cellLegalMove: 0x6989b3,
-  cellChargedTint: 0x3a3a55,
-  cardBorder: 0x3a3a55,
+  // bg is unused at runtime (canvas is transparent) but kept as the
+  // logical "what shows through the gaps" tone for future fallback use.
+  bg: 0x0e0a08,
+  cellEmpty: 0x1c130a,
+  cellHover: 0x2a1f15,
+  cellLegalMove: 0x5dd0e6,
+  cellChargedTint: 0x2a4a52,
+  cardBorder: 0xa07a3d,
+  cardBorderDim: 0x5a4a2a,
+  cardBevelHighlight: 0x4a3825,
+  cardBevelShadow: 0x080503,
   cardShadow: 0x000000,
-  exitFill: 0x1a3a2a,
-  exitStroke: 0x4cd996,
-  exitLockedFill: 0x2a2323,
-  exitLockedStroke: 0xff6a6a,
-  enemyCardFill: 0x2c1f24,
-  enemyCardStroke: 0xa53a3a,
-  hpStat: 0xff8a8a,
-  attackStat: 0xffe19a,
-  hero: 0xf6e7a3,
-  heroOutline: 0xfff7c2,
-  heroCardFill: 0x2a2520,
-  cornerStat: 0xe9e7d8,
-  text: 0xe9e7d8,
-  textOnLight: 0x141420,
-  chamberDivider: 0x2a2a3e,
+  cardInnerFrame: 0xe8c890,
+  exitFill: 0x1c130a,
+  exitStroke: 0xe8a04a,
+  exitLockedFill: 0x1c130a,
+  exitLockedStroke: 0xc46060,
+  enemyCardFill: 0x1c130a,
+  enemyCardStroke: 0x5a4a2a,
+  hpStat: 0xd46060,
+  attackStat: 0xe8a04a,
+  hero: 0xe8c890,
+  heroOutline: 0xe8a04a,
+  heroCardFill: 0x1c130a,
+  cornerStat: 0xf0e6d0,
+  text: 0xf0e6d0,
+  textOnLight: 0x16100a,
+  chamberDivider: 0x5a4a2a,
 } as const;
 
 export const RUNE_COLORS: Record<Rune, number> = {

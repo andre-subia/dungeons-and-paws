@@ -67,14 +67,9 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
     let progress = nextHero.brambleProgress + 1;
     let potions = nextHero.potions;
     while (progress >= 3) {
-      if (potions < nextHero.potionsMax) {
-        potions += 1;
-        progress -= 3;
-        events.push({ type: "POTION_GAINED", potions, potionsMax: nextHero.potionsMax });
-      } else {
-        progress = 2;
-        break;
-      }
+      potions += 1;
+      progress -= 3;
+      events.push({ type: "POTION_GAINED", potions });
     }
     nextHero = { ...nextHero, brambleProgress: progress, potions };
   }
