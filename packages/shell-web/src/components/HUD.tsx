@@ -404,13 +404,14 @@ function InventorySheet({
   for (const it of hero.items) {
     if (it.kind === "sword" || it.kind === "staff") items.push({ kind: "weapon", id: it.id });
   }
-  for (let i = 0; i < hero.brambleProgress; i++) items.push({ kind: "leaf", id: `leaf-${i}` });
   for (let i = 0; i < hero.potions; i++) items.push({ kind: "potion", id: `potion-${i}` });
+  for (let i = 0; i < hero.brambleProgress; i++) items.push({ kind: "leaf", id: `leaf-${i}` });
   const [phase, setPhase] = useState<"enter" | "open" | "exit">("enter");
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const swipeCloseRef = useRef<{ pointerId: number; startX: number; startY: number; startScrollTop: number } | null>(null);
   const [movingItemId, setMovingItemId] = useState<string | null>(null);
   const BAG_LAYOUT_KEY = "gridlore:bagLayout:v1";
+  const BAG_PINNED_KEY = "gridlore:bagPinned:v1";
   const [layout, setLayout] = useState<Record<string, { x: number; y: number }>>(() => {
     try {
       const raw = localStorage.getItem(BAG_LAYOUT_KEY);
@@ -418,6 +419,21 @@ function InventorySheet({
       const parsed = JSON.parse(raw) as unknown;
       if (!parsed || typeof parsed !== "object") return {};
       return parsed as Record<string, { x: number; y: number }>;
+    } catch {
+      return {};
+    }
+  });
+  const [pinned, setPinned] = useState<Record<string, true>>(() => {
+    try {
+      const raw = localStorage.getItem(BAG_PINNED_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return {};
+      const out: Record<string, true> = {};
+      for (const v of parsed) {
+        if (typeof v === "string" && v.trim() !== "") out[v] = true;
+      }
+      return out;
     } catch {
       return {};
     }
@@ -433,6 +449,11 @@ function InventorySheet({
       localStorage.setItem(BAG_LAYOUT_KEY, JSON.stringify(layout));
     } catch {}
   }, [layout]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(BAG_PINNED_KEY, JSON.stringify(Object.keys(pinned)));
+    } catch {}
+  }, [pinned]);
 
   function requestClose() {
     if (phase === "exit") return;
@@ -513,7 +534,8 @@ function InventorySheet({
   for (const it of items) {
     const dims = itemDims(it.id);
     if (!dims) continue;
-    const preferred = layout[it.id];
+    const allowPreferred = it.kind === "weapon" || pinned[it.id] === true;
+    const preferred = allowPreferred ? layout[it.id] : undefined;
     if (preferred && canPlace(preferred.x, preferred.y, dims.w, dims.h)) {
       nextLayout[it.id] = preferred;
       place(it.id, it.kind, preferred.x, preferred.y, dims.w, dims.h);
@@ -568,6 +590,7 @@ function InventorySheet({
       }
     }
     setLayout((prev) => ({ ...prev, [id]: { x, y } }));
+    setPinned((prev) => (prev[id] ? prev : { ...prev, [id]: true }));
     setMovingItemId(null);
   }
 
