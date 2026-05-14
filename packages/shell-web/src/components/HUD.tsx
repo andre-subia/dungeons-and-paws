@@ -395,7 +395,7 @@ function InventorySheet({
 }) {
   const canUsePotion = hero.potions > 0 && hero.hp < hero.hpMax;
   const GRID_COLS = 4;
-  const GRID_ROWS = 4;
+  const GRID_ROWS = 3;
   const items: Array<
     | { kind: "weapon"; id: string }
     | { kind: "leaf"; id: string }
@@ -594,6 +594,29 @@ function InventorySheet({
     setMovingItemId(null);
   }
 
+  const movingDims = movingItemId ? itemDims(movingItemId) : null;
+  const movingCurrent = movingItemId ? placements.find((p) => p.id === movingItemId) : null;
+  const movingOccupied = movingItemId
+    ? Array.from({ length: GRID_ROWS }, (_, yy) =>
+        Array.from({ length: GRID_COLS }, (_, xx) => occupied[yy]![xx]!),
+      )
+    : null;
+  if (movingItemId && movingOccupied && movingCurrent) {
+    for (let yy = movingCurrent.y; yy < movingCurrent.y + movingCurrent.h; yy++) {
+      for (let xx = movingCurrent.x; xx < movingCurrent.x + movingCurrent.w; xx++) movingOccupied[yy]![xx] = false;
+    }
+  }
+  function canDropAtCell(x: number, y: number): boolean {
+    if (!movingItemId || !movingDims || !movingOccupied) return false;
+    if (x < 0 || y < 0 || x + movingDims.w > GRID_COLS || y + movingDims.h > GRID_ROWS) return false;
+    for (let yy = y; yy < y + movingDims.h; yy++) {
+      for (let xx = x; xx < x + movingDims.w; xx++) {
+        if (movingOccupied[yy]![xx]!) return false;
+      }
+    }
+    return true;
+  }
+
   return (
     <div
       data-swipe-exempt="true"
@@ -684,20 +707,25 @@ function InventorySheet({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gridTemplateRows: "repeat(4, minmax(0, 1fr))",
+            gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${GRID_ROWS}, minmax(0, 1fr))`,
             gap: 0,
           }}
         >
           {Array.from({ length: GRID_ROWS }).flatMap((_, y) =>
             Array.from({ length: GRID_COLS }).map((_, x) => (
+              (() => {
+                const dropAllowed = movingItemId ? canDropAtCell(x, y) : false;
+                return (
               <InventorySlotEmpty
                 key={`cell-${x}-${y}`}
-                onClick={movingItemId ? () => requestMoveToCell(x, y) : undefined}
-                highlighted={movingItemId !== null}
+                onClick={dropAllowed ? () => requestMoveToCell(x, y) : undefined}
+                dropAllowed={dropAllowed}
                 x={x}
                 y={y}
               />
+                );
+              })()
             )),
           )}
           {placements.map((p) => {
@@ -1011,12 +1039,12 @@ function InventorySlotPotion({
 
 function InventorySlotEmpty({
   onClick,
-  highlighted,
+  dropAllowed,
   x,
   y,
 }: {
   onClick?: () => void;
-  highlighted?: boolean;
+  dropAllowed?: boolean;
   x: number;
   y: number;
 }) {
@@ -1032,7 +1060,7 @@ function InventorySlotEmpty({
         gridRowStart: y + 1,
         zIndex: 0,
         cursor: onClick ? "pointer" : "default",
-        ...pixelBorder(highlighted ? COLORS.borderSubtle : COLORS.borderDim, 1),
+        ...pixelBorder(dropAllowed ? "rgba(76, 196, 108, 0.9)" : COLORS.borderDim, 1),
       }}
     />
   );

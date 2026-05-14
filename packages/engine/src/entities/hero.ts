@@ -30,7 +30,7 @@ export type HeroTemplate = {
 
 export const WANDERER_TEMPLATE: HeroTemplate = {
   characterId: "wanderer",
-  hpMax: 8,
+  hpMax: 7,
   stride: 1,
   attack: 1,
   focusMax: 2,

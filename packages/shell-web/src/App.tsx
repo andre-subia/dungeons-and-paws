@@ -1079,9 +1079,7 @@ function PlayingHeader({
           <span style={{ color: COLORS.textMuted, marginRight: 6 }}>{t("hud.floorLabel")}</span>
           {floorIndex + 1}
         </span>
-        <span style={{ color: COLORS.heart }}>♥</span>
         <span style={{ color: COLORS.text }}>{t("app.title")}</span>
-        <span style={{ color: COLORS.heart }}>♥</span>
         <span>
           <span style={{ color: COLORS.textMuted, marginRight: 6 }}>🏆</span>
           {score}
@@ -1525,7 +1523,7 @@ function NamePromptModal({
           disabled={!canSave}
           style={{ ...pixelButtonPrimary, fontSize: 11 }}
         >
-          ♥ {t("namePrompt.save")}
+          {t("namePrompt.save")}
         </button>
       </div>
     </ModalShell>

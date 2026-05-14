@@ -85,7 +85,7 @@ export function TitleScreen({
         >
           {ctaLabel}{" "}
           <span aria-hidden="true" style={{ color: "#fff" }}>
-            ♥
+            🎲
           </span>
         </button>
         <div
@@ -347,7 +347,7 @@ function FloweyBubble() {
       <div style={{ fontSize: 14, lineHeight: 1.35 }}>
         <div>{t("title.flowey1")}</div>
         <div style={{ marginTop: 4 }}>
-          <span style={{ color: COLORS.heart }}>♥</span> {t("title.flowey2")}
+          {t("title.flowey2")}
         </div>
       </div>
     </div>
