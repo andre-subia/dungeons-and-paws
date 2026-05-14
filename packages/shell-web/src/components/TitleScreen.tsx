@@ -91,6 +91,7 @@ export function TitleScreen({
         <div
           style={{
             ...sectionLabel,
+            marginTop: 8,
             whiteSpace: "pre-line",
             lineHeight: 1.5,
             color: COLORS.textMuted,
@@ -375,8 +376,8 @@ function SansBubble() {
           height: 36,
           display: "grid",
           placeItems: "center",
-          background: COLORS.bgSunken,
-          ...pixelBorder(COLORS.borderDim, 1),
+          background: COLORS.bgElevated,
+          ...pixelBorder(COLORS.borderSubtle, 1),
         }}
         aria-hidden="true"
       >
@@ -394,7 +395,7 @@ function ChallengerStrip({ challengers }: { challengers: ReadonlyArray<TitleCard
   return (
     <div className="dap-challenger-strip">
       {challengers.map((c, i) => (
-        <ChallengerCard key={i} entry={c} highlight={i === 2} rank={i + 1} />
+        <ChallengerCard key={i} entry={c} highlight={i === 0} rank={i + 1} />
       ))}
     </div>
   );
@@ -431,6 +432,8 @@ function ChallengerCard({
   highlight: boolean;
   rank: number;
 }) {
+  const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
+  const badgeText = medal ?? `#${rank}`;
   const cardStyle: CSSProperties = {
     position: "relative",
     background: COLORS.bgPanel,
@@ -454,17 +457,19 @@ function ChallengerCard({
           position: "absolute",
           top: -8,
           right: -6,
-          background: highlight ? COLORS.primary : COLORS.bgPanel,
-          color: highlight ? "#fff" : COLORS.text,
-          ...pixelBorder(highlight ? COLORS.primary : COLORS.borderSubtle, 1),
-          padding: "2px 6px",
-          fontFamily: FONTS.display,
-          fontSize: 9,
-          letterSpacing: "0.14em",
-          lineHeight: 1.2,
+          background: medal ? "rgba(8, 5, 3, 0.92)" : highlight ? COLORS.primary : COLORS.bgPanel,
+          color: medal ? COLORS.text : highlight ? "#fff" : COLORS.text,
+          ...pixelBorder(medal ? COLORS.borderSubtle : highlight ? COLORS.primary : COLORS.borderSubtle, 1),
+          padding: medal ? "3px 7px" : "2px 6px",
+          fontFamily: medal ? FONTS.body : FONTS.display,
+          fontSize: medal ? 14 : 9,
+          letterSpacing: medal ? 0 : "0.14em",
+          lineHeight: 1.1,
+          boxShadow: medal ? "0 0 0 1px rgba(0, 0, 0, 0.35)" : undefined,
         }}
+        aria-label={medal ? `#${rank}` : undefined}
       >
-        #{rank}
+        {badgeText}
       </div>
       <div style={{ fontSize: 30, lineHeight: "30px" }} aria-hidden="true">
         {entry.emoji}
