@@ -47,6 +47,8 @@ export type PlayerInput =
   | { readonly type: "USE_POTION" }
   | { readonly type: "EQUIP_WEAPON"; readonly itemId: string | null }
   | { readonly type: "DROP_ITEM"; readonly itemId: string }
+  | { readonly type: "DROP_POTION" }
+  | { readonly type: "DROP_LEAF" }
   | {
       readonly type: "ABILITY";
       readonly abilityId: string;

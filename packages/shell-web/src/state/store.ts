@@ -23,7 +23,7 @@ export type RunStore = {
   usePotion: () => boolean;
   /** Equip/unequip a weapon by item id (null to unequip). Returns true if accepted. */
   equipWeapon: (itemId: string | null) => boolean;
-  /** Drop a weapon from inventory. Returns true if accepted. */
+  /** Drop an item from the bag. Returns true if accepted. */
   dropItem: (itemId: string) => boolean;
   /** Tutorial-only: set starting potions to at least N. */
   boostTutorialPotions: (minPotions: number) => void;
@@ -70,7 +70,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
   dropItem(itemId) {
     const { state } = get();
     if (state.outcome !== "in_progress") return false;
-    const result = applyInput(state, { type: "DROP_ITEM", itemId });
+    const result = itemId.startsWith("potion-")
+      ? applyInput(state, { type: "DROP_POTION" })
+      : itemId.startsWith("leaf-")
+        ? applyInput(state, { type: "DROP_LEAF" })
+        : applyInput(state, { type: "DROP_ITEM", itemId });
     set({ state: result.state, lastEvents: result.events });
     return result.state !== state;
   },

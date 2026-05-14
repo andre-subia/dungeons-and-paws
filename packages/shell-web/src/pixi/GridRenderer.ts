@@ -842,7 +842,7 @@ export class GridRenderer {
           cy - cardH / 2,
           "right-top",
           contentScale,
-          COLORS.hpStat,
+          COLORS.cornerStat,
         );
         this.addCornerIconValue(
           "⚔",
@@ -889,15 +889,19 @@ export class GridRenderer {
           COLORS.cornerStat,
         );
         if (payload.countdown !== null) {
-          this.addCornerIconValue(
-            "⏳",
-            `${payload.countdown}`,
-            cx + cardW / 2,
-            cy - cardH / 2,
-            "right-top",
-            contentScale,
-            COLORS.hpStat,
-          );
+          const countdown = new Text({
+            text: `${payload.countdown}`,
+            style: {
+              fontFamily: "ui-monospace, monospace",
+              fontSize: Math.max(16, Math.floor(contentScale * 0.36)),
+              fill: 0xffffff,
+              fontWeight: "800",
+              stroke: { color: 0x000000, width: 3 },
+            },
+          });
+          countdown.anchor.set(0.5);
+          countdown.position.set(cx, cy + cardH * 0.02);
+          this.tileLayer.addChild(countdown);
         }
         return;
       }
@@ -1038,6 +1042,8 @@ export class GridRenderer {
       this.heroLayer.addChild(key);
     }
 
+    const hpFrac = hero.hpMax > 0 ? hero.hp / hero.hpMax : 1;
+    const heroHpColor = hpFrac < 0.2 ? COLORS.hpStat : COLORS.cornerStat;
     this.addCornerIconValue(
       "♥",
       `${hero.hp}`,
@@ -1045,7 +1051,7 @@ export class GridRenderer {
       cy - cardH / 2,
       "right-top",
       contentScale,
-      COLORS.cornerStat,
+      heroHpColor,
       this.heroLayer,
     );
     this.addCornerIconValue(

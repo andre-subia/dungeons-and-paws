@@ -49,6 +49,10 @@ export function applyInput(state: RunState, input: PlayerInput): TurnResult {
       return applyEquipWeapon(state, input.itemId);
     case "DROP_ITEM":
       return applyDropItem(state, input.itemId);
+    case "DROP_POTION":
+      return applyDropPotion(state);
+    case "DROP_LEAF":
+      return applyDropLeaf(state);
     case "ABILITY":
       return reject(state, "ability_unimplemented", undefined, "ABILITY not implemented yet");
     case "END_FLOOR":
@@ -115,7 +119,7 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
   //    staff strike, in which case we don't traverse intermediate tiles.
   let nextState: RunState = state;
   if (!canRangedAttack) {
-    for (let i = 0; i < path.length - 1; i++) {
+    for (let i = 1; i < path.length - 1; i++) {
       const cell = path[i]!;
       const result = resolveTileAt(nextState, cell);
       nextState = result.state;
@@ -449,6 +453,28 @@ function applyDropItem(state: RunState, itemId: string): TurnResult {
     inputLog: [...state.inputLog, { type: "DROP_ITEM", itemId }],
   };
   return { state: nextState, events };
+}
+
+function applyDropPotion(state: RunState): TurnResult {
+  const hero = state.hero;
+  if (hero.potions <= 0) return { state, events: [] };
+  const nextState: RunState = {
+    ...state,
+    hero: { ...hero, potions: hero.potions - 1 },
+    inputLog: [...state.inputLog, { type: "DROP_POTION" }],
+  };
+  return { state: nextState, events: [] };
+}
+
+function applyDropLeaf(state: RunState): TurnResult {
+  const hero = state.hero;
+  if (hero.brambleProgress <= 0) return { state, events: [] };
+  const nextState: RunState = {
+    ...state,
+    hero: { ...hero, brambleProgress: hero.brambleProgress - 1 },
+    inputLog: [...state.inputLog, { type: "DROP_LEAF" }],
+  };
+  return { state: nextState, events: [] };
 }
 
 function tickBombs(state: RunState): TurnResult {

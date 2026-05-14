@@ -503,8 +503,9 @@ function InventorySheet({
     window.setTimeout(() => onClose(), 170);
   }
 
-  function droppableWeaponId(id: string | null): string | null {
+  function droppableItemId(id: string | null): string | null {
     if (!id) return null;
+    if (id.startsWith("potion-") || id.startsWith("leaf-")) return id;
     const item = hero.items.find((it) => it.id === id);
     if (!item) return null;
     if (item.kind !== "sword" && item.kind !== "staff") return null;
@@ -671,7 +672,7 @@ function InventorySheet({
     <div
       data-swipe-exempt="true"
       onClick={() => {
-        const id = droppableWeaponId(movingItemId);
+        const id = droppableItemId(movingItemId);
         if (id) {
           setDropConfirmItemId(id);
           return;
@@ -684,6 +685,8 @@ function InventorySheet({
         background: "rgba(8, 5, 3, 0.55)",
         backdropFilter: "blur(2px)",
         WebkitBackdropFilter: "blur(2px)",
+        userSelect: "none",
+        WebkitUserSelect: "none",
         display: "grid",
         alignItems: "end",
         pointerEvents: "auto",
@@ -712,6 +715,8 @@ function InventorySheet({
           transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)",
           willChange: "transform",
           touchAction: "pan-y",
+          userSelect: "none",
+          WebkitUserSelect: "none",
           boxShadow: `0 -8px 24px rgba(0, 0, 0, 0.6), 0 0 32px ${COLORS.primaryGlow}`,
         }}
       >
@@ -910,6 +915,9 @@ function inventorySlotBaseStyle(): React.CSSProperties {
     background: "rgba(8, 5, 3, 0.32)",
     minHeight: 74,
     boxSizing: "border-box",
+    userSelect: "none",
+    WebkitUserSelect: "none",
+    WebkitTouchCallout: "none",
   };
 }
 
@@ -944,6 +952,7 @@ function InventorySlotItem({
       onPointerDown={(e) => {
         if (locked) return;
         if (e.pointerType === "mouse") return;
+        e.preventDefault();
         ignoreClickRef.current = false;
         if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
         longPressRef.current = window.setTimeout(() => {
@@ -1026,6 +1035,7 @@ function InventorySlotWeapon({
       onPointerDown={(e) => {
         if (locked) return;
         if (e.pointerType === "mouse") return;
+        e.preventDefault();
         ignoreClickRef.current = false;
         if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
         longPressRef.current = window.setTimeout(() => {
@@ -1127,6 +1137,7 @@ function InventorySlotPotion({
       }}
       onPointerDown={(e) => {
         if (e.pointerType === "mouse") return;
+        e.preventDefault();
         ignoreClickRef.current = false;
         if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
         longPressRef.current = window.setTimeout(() => {

@@ -33,6 +33,7 @@ const HELP_SECTIONS = [
 
 const ANIM_SPEED_STORAGE_KEY = "gridlore:animSpeed";
 const HAPTICS_STORAGE_KEY = "gridlore:hapticsEnabled";
+const MUSIC_MUTED_STORAGE_KEY = "gridlore:musicMuted";
 const SWIPE_SENSITIVITY_STORAGE_KEY = "gridlore:swipeSensitivity";
 const LEGAL_MOVE_OPACITY_STORAGE_KEY = "gridlore:legalMoveOpacity";
 const PLAYER_NAME_STORAGE_KEY = "gridlore:playerName";
@@ -43,6 +44,9 @@ const DEFAULT_SWIPE_SENSITIVITY = 1.25;
 const DEFAULT_LEGAL_MOVE_OPACITY = 0.4;
 const DEFAULT_PLAYER_NAME = "";
 const TUTORIAL_SEEN_KEY = "gridlore:tutorialSeen:v1";
+
+const TITLE_MUSIC_URL = "/audio/Steps_Into_The_Clearing.mp3";
+const GAME_MUSIC_URL = "/audio/The_Keeper_s_Hidden_Path.mp3";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? "";
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
@@ -326,6 +330,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
   const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, DEFAULT_HAPTICS_ENABLED));
+  const [musicMuted, setMusicMuted] = useState(() => readBool(MUSIC_MUTED_STORAGE_KEY, false));
   const [swipeSensitivity, setSwipeSensitivity] = useState(readSwipeSensitivity);
   const [legalMoveOpacity, setLegalMoveOpacity] = useState(readLegalMoveOpacity);
   const [playerId] = useState(readOrCreatePlayerId);
@@ -348,6 +353,10 @@ export function App() {
   const [tutorialPendingBag, setTutorialPendingBag] = useState(false);
   const [bagPotionConsumed, setBagPotionConsumed] = useState(false);
   const tutorialActive = tutorial !== null;
+  const titleMusicRef = useRef<HTMLAudioElement | null>(null);
+  const gameMusicRef = useRef<HTMLAudioElement | null>(null);
+  const lastMusicScreenRef = useRef<"title" | "playing" | null>(null);
+  const [musicNeedsGesture, setMusicNeedsGesture] = useState(false);
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
 
   const closeInventory = useCallback((force = false) => {
@@ -925,6 +934,13 @@ export function App() {
     } catch {}
   }
 
+  function updateMusicMuted(v: boolean) {
+    setMusicMuted(v);
+    try {
+      localStorage.setItem(MUSIC_MUTED_STORAGE_KEY, v ? "1" : "0");
+    } catch {}
+  }
+
   function savePlayerName(raw: string) {
     const cleaned = raw.trim().slice(0, 18);
     if (cleaned === "") return;
@@ -947,6 +963,7 @@ export function App() {
     updateSwipeSensitivity(DEFAULT_SWIPE_SENSITIVITY);
     updateLegalMoveOpacity(DEFAULT_LEGAL_MOVE_OPACITY);
     updateHapticsEnabled(DEFAULT_HAPTICS_ENABLED);
+    updateMusicMuted(false);
   }
 
   function localeFlag(locale: ReturnType<typeof getLocale>): string {
@@ -982,6 +999,102 @@ export function App() {
     setSettingsOpen(true);
   };
   const openName = () => setNamePromptOpen(true);
+
+  useEffect(() => {
+    if (titleMusicRef.current == null) {
+      const a = new Audio(TITLE_MUSIC_URL);
+      a.loop = true;
+      a.preload = "auto";
+      a.volume = 0.9;
+      titleMusicRef.current = a;
+    }
+    if (gameMusicRef.current == null) {
+      const a = new Audio(GAME_MUSIC_URL);
+      a.loop = true;
+      a.preload = "auto";
+      a.volume = 0.9;
+      gameMusicRef.current = a;
+    }
+    return () => {
+      titleMusicRef.current?.pause();
+      gameMusicRef.current?.pause();
+    };
+  }, []);
+
+  useEffect(() => {
+    const titleA = titleMusicRef.current;
+    const gameA = gameMusicRef.current;
+    if (!titleA || !gameA) return;
+
+    titleA.muted = musicMuted;
+    gameA.muted = musicMuted;
+
+    if (musicMuted) {
+      titleA.pause();
+      gameA.pause();
+      setMusicNeedsGesture(false);
+      lastMusicScreenRef.current = null;
+      return;
+    }
+
+    const active = screen === "title" ? titleA : screen === "playing" ? gameA : null;
+    const inactive = screen === "title" ? gameA : screen === "playing" ? titleA : null;
+    const key = screen === "title" || screen === "playing" ? screen : null;
+    const changed = lastMusicScreenRef.current !== key;
+
+    if (inactive) {
+      inactive.pause();
+      if (changed) inactive.currentTime = 0;
+    }
+    if (!active) return;
+
+    if (changed) {
+      active.currentTime = 0;
+      lastMusicScreenRef.current = key;
+    }
+    if (!active.paused) return;
+    active.play().catch(() => setMusicNeedsGesture(true));
+  }, [musicMuted, screen]);
+
+  useEffect(() => {
+    if (!musicNeedsGesture) return;
+    if (musicMuted) return;
+
+    const onGesture = () => {
+      setMusicNeedsGesture(false);
+      const active = screen === "title" ? titleMusicRef.current : screen === "playing" ? gameMusicRef.current : null;
+      if (!active) return;
+      if (musicMuted) return;
+      active.play().catch(() => setMusicNeedsGesture(true));
+    };
+
+    window.addEventListener("pointerdown", onGesture, { capture: true, once: true });
+    window.addEventListener("keydown", onGesture, { capture: true, once: true });
+    return () => {
+      window.removeEventListener("pointerdown", onGesture, true);
+      window.removeEventListener("keydown", onGesture, true);
+    };
+  }, [musicMuted, musicNeedsGesture, screen]);
+
+  useEffect(() => {
+    const onVis = () => {
+      const titleA = titleMusicRef.current;
+      const gameA = gameMusicRef.current;
+      if (!titleA || !gameA) return;
+      if (document.hidden) {
+        titleA.pause();
+        gameA.pause();
+        return;
+      }
+      if (musicMuted) return;
+      const active = screen === "title" ? titleA : screen === "playing" ? gameA : null;
+      if (!active) return;
+      if (!active.paused) return;
+      active.play().catch(() => setMusicNeedsGesture(true));
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [musicMuted, screen]);
 
   return (
     <>
@@ -1116,12 +1229,14 @@ export function App() {
           swipeSensitivity={swipeSensitivity}
           legalMoveOpacity={legalMoveOpacity}
           hapticsEnabled={hapticsEnabled}
+          musicMuted={musicMuted}
           playerName={playerName}
           onClose={() => setSettingsOpen(false)}
           onAnimSpeed={updateAnimSpeed}
           onSwipe={updateSwipeSensitivity}
           onLegalMoveOpacity={updateLegalMoveOpacity}
           onHaptics={updateHapticsEnabled}
+          onMusicMuted={updateMusicMuted}
           onEditName={() => setNamePromptOpen(true)}
           onReset={resetSettings}
           onResetTutorial={resetTutorial}
@@ -1262,8 +1377,18 @@ function TutorialOverlay({
         return;
       }
       const r = el.getBoundingClientRect();
-      const pad = 6;
-      setRect({ x: r.left - pad, y: r.top - pad, w: r.width + pad * 2, h: r.height + pad * 2 });
+      const isNarrow = window.innerWidth < 520;
+      const pad = isNarrow ? 3 : 6;
+      const margin = isNarrow ? 8 : 6;
+      const maxW = Math.max(0, window.innerWidth - margin * 2);
+      const maxH = Math.max(0, window.innerHeight - margin * 2);
+      const rawW = Math.max(0, r.width + pad * 2);
+      const rawH = Math.max(0, r.height + pad * 2);
+      const w = Math.min(rawW, maxW);
+      const h = Math.min(rawH, maxH);
+      const x = Math.min(Math.max(r.left - pad, margin), window.innerWidth - margin - w);
+      const y = Math.min(Math.max(r.top - pad, margin), window.innerHeight - margin - h);
+      setRect({ x, y, w, h });
     };
     update();
     window.addEventListener("resize", update);
@@ -1548,12 +1673,14 @@ function SettingsModal({
   swipeSensitivity,
   legalMoveOpacity,
   hapticsEnabled,
+  musicMuted,
   playerName,
   onClose,
   onAnimSpeed,
   onSwipe,
   onLegalMoveOpacity,
   onHaptics,
+  onMusicMuted,
   onEditName,
   onReset,
   onResetTutorial,
@@ -1563,12 +1690,14 @@ function SettingsModal({
   swipeSensitivity: number;
   legalMoveOpacity: number;
   hapticsEnabled: boolean;
+  musicMuted: boolean;
   playerName: string;
   onClose: () => void;
   onAnimSpeed: (v: number) => void;
   onSwipe: (v: number) => void;
   onLegalMoveOpacity: (v: number) => void;
   onHaptics: (v: boolean) => void;
+  onMusicMuted: (v: boolean) => void;
   onEditName: () => void;
   onReset: () => void;
   onResetTutorial: () => void;
@@ -1640,6 +1769,11 @@ function SettingsModal({
             onChange={(e) => onHaptics(e.target.checked)}
           />
           <span style={{ color: COLORS.textMuted }}>{t("settings.haptics")}</span>
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+          <input type="checkbox" checked={musicMuted} onChange={(e) => onMusicMuted(e.target.checked)} />
+          <span style={{ color: COLORS.textMuted }}>{t("settings.muteMusic")}</span>
         </label>
 
         <button
