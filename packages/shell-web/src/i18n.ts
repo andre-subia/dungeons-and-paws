@@ -483,7 +483,7 @@ const DICTS: Record<Locale, Dict> = {
     "title.heroLine3": "TIENE UNA",
     "title.heroLine4": "HISTORIA",
     "title.subtitle": "MUEVE. ATACA. SOBREVIVE.\nDESCIENDE MÁS PROFUNDO.",
-    "title.cta": "ENTRAR AL DUNGEON",
+    "title.cta": "COMENZAR EL DESCENSO",
     "title.ctaNote": "SIN GUARDADO.\nSOLO TU PUNTAJE.",
     "title.feature.realRuns.title": "PARTIDAS REALES",
     "title.feature.realRuns.body": "Sin guardado. Cada paso importa.",
