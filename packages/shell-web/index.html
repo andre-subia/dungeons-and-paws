@@ -7,7 +7,7 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
     />
     <meta name="theme-color" content="#0e0a08" />
-    <title>Dungeon and Paws</title>
+    <title>Dungeons & Paws</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -150,17 +150,27 @@
 
       /* Mobile */
       @media (max-width: 720px) {
+        .dap-title-runs {
+          margin-top: 10px;
+        }
         .dap-title-root {
+          display: block;
           overflow-y: auto;
         }
         .dap-title-topbar {
-          grid-template-columns: 1fr;
-          justify-items: center;
-          text-align: center;
+          grid-template-columns: 1fr auto;
+          justify-items: start;
+          text-align: left;
           gap: 8px;
+          margin-bottom: 24px;
         }
-        .dap-title-topbar > * {
-          justify-self: center;
+        .dap-title-topbar > :nth-child(2) {
+          display: none;
+        }
+        .dap-topbar-actions {
+          position: relative;
+          top: auto;
+          right: auto;
         }
         .dap-title-grid {
           grid-template-columns: 1fr;
@@ -176,6 +186,7 @@
         .dap-bottom-tags {
           justify-content: center;
           text-align: center;
+          margin-top: 12px;
         }
       }
 

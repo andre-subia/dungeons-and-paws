@@ -52,7 +52,7 @@ export function TitleScreen({
         position: "relative",
         height: "100%",
         width: "100%",
-        overflow: "hidden",
+        overflow: "scroll",
         boxSizing: "border-box",
         color: COLORS.text,
         fontFamily: FONTS.body,
@@ -103,7 +103,7 @@ export function TitleScreen({
         <SansBubble />
       </div>
 
-      <div>
+      <div className="dap-title-runs">
         <div
           style={{
             display: "flex",
@@ -163,9 +163,6 @@ function TopBar({
   return (
     <div className="dap-title-topbar">
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ color: COLORS.primary, fontSize: 18 }} className="dap-pulse">
-          🐾
-        </span>
         <span
           style={{
             ...sectionLabel,
@@ -188,7 +185,7 @@ function TopBar({
       >
         ✦ {t("title.crest")} ✦
       </div>
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center" }}>
+      <div className="dap-topbar-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center" }}>
         <button
           onClick={onOpenName}
           title={t("settings.editName")}
@@ -228,13 +225,13 @@ function HeroBlock() {
           ...displayHeading,
           margin: 0,
           fontSize: "clamp(34px, 9.2vw, 86px)",
-          letterSpacing: "0.01em",
-          wordSpacing: "-0.2em",
+          letterSpacing: "0",
+          wordSpacing: "-0.8em",
           lineHeight: 1.02,
         }}
       >
         <div>
-          Dungeon & Paws
+          Dungeons & Paws
           <span
             aria-hidden="true"
             className="dap-pulse"
