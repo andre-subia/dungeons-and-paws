@@ -44,11 +44,12 @@ export type PlayerInput =
       readonly from: Cell;
       readonly to: Cell;
     }
-  | { readonly type: "USE_POTION" }
+  | { readonly type: "USE_POTION"; readonly potionId: string }
   | { readonly type: "EQUIP_WEAPON"; readonly itemId: string | null }
   | { readonly type: "DROP_ITEM"; readonly itemId: string }
-  | { readonly type: "DROP_POTION" }
+  | { readonly type: "DROP_POTION"; readonly potionId: string }
   | { readonly type: "DROP_LEAF" }
+  | { readonly type: "SET_WEAPON_LAYOUT"; readonly itemId: string; readonly x: number; readonly y: number }
   | {
       readonly type: "ABILITY";
       readonly abilityId: string;

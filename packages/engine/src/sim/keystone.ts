@@ -84,15 +84,102 @@ export function applyKeystone(
       break;
     }
     case "bramble": {
-      nextHero = { ...nextHero, potions: nextHero.potions + 1 };
-      events.push({
-        type: "POTION_GAINED",
-        potions: nextHero.potions,
-      });
+      const cols = 4;
+      const rows = 3;
+      const occupied = Array.from({ length: rows }, () => Array.from({ length: cols }, () => false));
+      const layout = nextHero.bagLayout;
+      let ok = true;
+
+      for (const pid of nextHero.potionIds) {
+        const pos = layout[pid];
+        if (!pos) {
+          ok = false;
+          break;
+        }
+        if (pos.x < 0 || pos.y < 0 || pos.x >= cols || pos.y >= rows) {
+          ok = false;
+          break;
+        }
+        if (occupied[pos.y]![pos.x]!) {
+          ok = false;
+          break;
+        }
+        occupied[pos.y]![pos.x] = true;
+      }
+
+      if (ok) {
+        for (let i = 0; i < nextHero.brambleProgress; i++) {
+          const lid = `leaf-${i}`;
+          const pos = layout[lid];
+          if (!pos) continue;
+          if (pos.x < 0 || pos.y < 0 || pos.x >= cols || pos.y >= rows) continue;
+          if (occupied[pos.y]![pos.x]!) {
+            ok = false;
+            break;
+          }
+          occupied[pos.y]![pos.x] = true;
+        }
+      }
+
+      if (ok) {
+        for (const it of nextHero.items) {
+          if (it.kind !== "sword" && it.kind !== "staff") continue;
+          const pos = layout[it.id];
+          if (!pos) {
+            ok = false;
+            break;
+          }
+          const dims = it.kind === "sword" ? { w: 1, h: 2 } : { w: 2, h: 1 };
+          if (pos.x < 0 || pos.y < 0 || pos.x + dims.w > cols || pos.y + dims.h > rows) {
+            ok = false;
+            break;
+          }
+          for (let yy = pos.y; yy < pos.y + dims.h; yy++) {
+            for (let xx = pos.x; xx < pos.x + dims.w; xx++) {
+              if (occupied[yy]![xx]!) {
+                ok = false;
+                break;
+              }
+              occupied[yy]![xx] = true;
+            }
+            if (!ok) break;
+          }
+          if (!ok) break;
+        }
+      }
+
+      if (!ok) {
+        effect = { kind: "bramble", potionGained: false, potions: nextHero.potionIds.length };
+        break;
+      }
+
+      let spot: { x: number; y: number } | null = null;
+      for (let y = 0; y < rows && !spot; y++) {
+        for (let x = 0; x < cols; x++) {
+          if (!occupied[y]![x]!) {
+            spot = { x, y };
+            break;
+          }
+        }
+      }
+      if (!spot) {
+        effect = { kind: "bramble", potionGained: false, potions: nextHero.potionIds.length };
+        break;
+      }
+
+      const id = `potion-${nextHero.potionCounter}`;
+      const nextPotionIds = [...nextHero.potionIds, id];
+      nextHero = {
+        ...nextHero,
+        potionIds: nextPotionIds,
+        potionCounter: nextHero.potionCounter + 1,
+        bagLayout: { ...nextHero.bagLayout, [id]: spot },
+      };
+      events.push({ type: "POTION_GAINED", potions: nextHero.potionIds.length });
       effect = {
         kind: "bramble",
         potionGained: true,
-        potions: nextHero.potions,
+        potions: nextHero.potionIds.length,
       };
       break;
     }

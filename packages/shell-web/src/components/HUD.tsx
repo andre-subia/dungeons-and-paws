@@ -56,6 +56,7 @@ export function HUD({
   const usePotion = useRunStore((s) => s.usePotion);
   const equipWeapon = useRunStore((s) => s.equipWeapon);
   const dropItem = useRunStore((s) => s.dropItem);
+  const setWeaponLayout = useRunStore((s) => s.setWeaponLayout);
   const boostTutorialPotions = useRunStore((s) => s.boostTutorialPotions);
   const { trigger } = useWebHaptics();
   const events = useRunStore((s) => s.lastEvents);
@@ -158,8 +159,8 @@ export function HUD({
     }
   }
 
-  function onUsePotion() {
-    const ok = usePotion();
+  function onUsePotion(potionId: string) {
+    const ok = usePotion(potionId);
     if (ok && hapticsOn()) {
       trigger([
         { duration: 30 },
@@ -377,6 +378,7 @@ export function HUD({
           onUsePotion={onUsePotion}
           onEquipWeapon={equipWeapon}
           onDropItem={dropItem}
+          onSetWeaponLayout={setWeaponLayout}
           tutorialPotionGate={tutorialPotionGate === true}
         />
       )}
@@ -422,79 +424,51 @@ function InventorySheet({
   onUsePotion,
   onEquipWeapon,
   onDropItem,
+  onSetWeaponLayout,
   tutorialPotionGate,
 }: {
   hero: ReturnType<typeof useRunStore.getState>["state"]["hero"];
   gold: number;
   onClose: () => void;
-  onUsePotion: () => void;
+  onUsePotion: (potionId: string) => void;
   onEquipWeapon: (itemId: string | null) => boolean;
   onDropItem: (itemId: string) => boolean;
+  onSetWeaponLayout: (itemId: string, x: number, y: number) => boolean;
   tutorialPotionGate: boolean;
 }) {
-  const canUsePotion = hero.potions > 0 && hero.hp < hero.hpMax;
-  const allowedPotionId = "potion-0";
+  const canUsePotion = hero.potionIds.length > 0 && hero.hp < hero.hpMax;
+  const allowedPotionId = hero.potionIds[0] ?? "potion-0";
   const GRID_COLS = 4;
   const GRID_ROWS = 3;
-  const items: Array<
-    | { kind: "weapon"; id: string }
-    | { kind: "leaf"; id: string }
-    | { kind: "potion"; id: string }
-  > = [];
-  for (const it of hero.items) {
-    if (it.kind === "sword" || it.kind === "staff") items.push({ kind: "weapon", id: it.id });
-  }
-  for (let i = 0; i < hero.potions; i++) items.push({ kind: "potion", id: `potion-${i}` });
-  for (let i = 0; i < hero.brambleProgress; i++) items.push({ kind: "leaf", id: `leaf-${i}` });
   const [phase, setPhase] = useState<"enter" | "open" | "exit">("enter");
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const swipeCloseRef = useRef<{ pointerId: number; startX: number; startY: number; startScrollTop: number } | null>(null);
   const [movingItemId, setMovingItemId] = useState<string | null>(null);
   const [dropConfirmItemId, setDropConfirmItemId] = useState<string | null>(null);
-  const BAG_LAYOUT_KEY = "gridlore:bagLayout:v1";
-  const BAG_PINNED_KEY = "gridlore:bagPinned:v1";
-  const [layout, setLayout] = useState<Record<string, { x: number; y: number }>>(() => {
-    try {
-      const raw = localStorage.getItem(BAG_LAYOUT_KEY);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw) as unknown;
-      if (!parsed || typeof parsed !== "object") return {};
-      return parsed as Record<string, { x: number; y: number }>;
-    } catch {
-      return {};
-    }
-  });
-  const [pinned, setPinned] = useState<Record<string, true>>(() => {
-    try {
-      const raw = localStorage.getItem(BAG_PINNED_KEY);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) return {};
-      const out: Record<string, true> = {};
-      for (const v of parsed) {
-        if (typeof v === "string" && v.trim() !== "") out[v] = true;
-      }
-      return out;
-    } catch {
-      return {};
-    }
-  });
+  const [stableHeightPx, setStableHeightPx] = useState<number | null>(null);
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setPhase("open"));
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(BAG_LAYOUT_KEY, JSON.stringify(layout));
-    } catch {}
-  }, [layout]);
-  useEffect(() => {
-    try {
-      localStorage.setItem(BAG_PINNED_KEY, JSON.stringify(Object.keys(pinned)));
-    } catch {}
-  }, [pinned]);
+  function toggleMove(id: string) {
+    if (tutorialPotionGate) return;
+    const isPotion = hero.potionIds.includes(id);
+    const isLeaf = id.startsWith("leaf-") && Number.isFinite(Number.parseInt(id.slice("leaf-".length), 10));
+    const isWeapon = hero.items.some((it) => it.id === id && (it.kind === "sword" || it.kind === "staff"));
+    if (!isPotion && !isLeaf && !isWeapon) return;
+    const el = sheetRef.current;
+    setMovingItemId((cur) => {
+      const next = cur === id ? null : id;
+      if (cur === null && next !== null && el) {
+        const h = Math.ceil(el.getBoundingClientRect().height);
+        if (Number.isFinite(h) && h > 0) setStableHeightPx(h);
+      }
+      if (next === null) setStableHeightPx(null);
+      return next;
+    });
+  }
 
   function requestClose() {
     if (tutorialPotionGate) return;
@@ -572,52 +546,26 @@ function InventorySheet({
     placements.push({ id, kind, x, y, w, h });
   }
 
-  function firstFit(w: number, h: number): { x: number; y: number } | null {
-    for (let y = 0; y < GRID_ROWS; y++) {
-      for (let x = 0; x < GRID_COLS; x++) {
-        if (canPlace(x, y, w, h)) return { x, y };
-      }
-    }
-    return null;
+  for (const id of hero.potionIds) {
+    const pos = hero.bagLayout?.[id];
+    if (!pos) continue;
+    if (canPlace(pos.x, pos.y, 1, 1)) place(id, "potion", pos.x, pos.y, 1, 1);
   }
 
-  const nextLayout: Record<string, { x: number; y: number }> = {};
-  for (const it of items) {
-    const dims = itemDims(it.id);
-    if (!dims) continue;
-    const allowPreferred = it.kind === "weapon" || pinned[it.id] === true;
-    const preferred = allowPreferred ? layout[it.id] : undefined;
-    if (preferred && canPlace(preferred.x, preferred.y, dims.w, dims.h)) {
-      nextLayout[it.id] = preferred;
-      place(it.id, it.kind, preferred.x, preferred.y, dims.w, dims.h);
-      continue;
-    }
-    const spot = firstFit(dims.w, dims.h);
-    if (!spot) continue;
-    nextLayout[it.id] = spot;
-    place(it.id, it.kind, spot.x, spot.y, dims.w, dims.h);
+  for (let i = 0; i < hero.brambleProgress; i++) {
+    const id = `leaf-${i}`;
+    const pos = hero.bagLayout?.[id];
+    if (!pos) continue;
+    if (canPlace(pos.x, pos.y, 1, 1)) place(id, "leaf", pos.x, pos.y, 1, 1);
   }
 
-  function layoutsEqual(
-    a: Record<string, { x: number; y: number }>,
-    b: Record<string, { x: number; y: number }>,
-  ): boolean {
-    const aKeys = Object.keys(a);
-    const bKeys = Object.keys(b);
-    if (aKeys.length !== bKeys.length) return false;
-    for (const k of aKeys) {
-      const av = a[k];
-      if (av === undefined) return false;
-      const bv = b[k];
-      if (bv === undefined) return false;
-      if (av.x !== bv.x || av.y !== bv.y) return false;
-    }
-    return true;
+  for (const it of hero.items) {
+    if (it.kind !== "sword" && it.kind !== "staff") continue;
+    const dims = weaponDims(it.kind);
+    const pos = hero.bagLayout?.[it.id];
+    if (!pos) continue;
+    if (canPlace(pos.x, pos.y, dims.w, dims.h)) place(it.id, "weapon", pos.x, pos.y, dims.w, dims.h);
   }
-
-  useEffect(() => {
-    if (!layoutsEqual(layout, nextLayout)) setLayout(nextLayout);
-  }, [hero.items, hero.brambleProgress, hero.potions]);
 
   function requestMoveToCell(x: number, y: number) {
     const id = movingItemId;
@@ -640,9 +588,8 @@ function InventorySheet({
         if (tmpOccupied[yy]![xx]!) return;
       }
     }
-    setLayout((prev) => ({ ...prev, [id]: { x, y } }));
-    setPinned((prev) => (prev[id] ? prev : { ...prev, [id]: true }));
     setMovingItemId(null);
+    onSetWeaponLayout(id, x, y);
   }
 
   const movingDims = movingItemId ? itemDims(movingItemId) : null;
@@ -708,13 +655,14 @@ function InventorySheet({
           WebkitBackdropFilter: "blur(18px) saturate(1.25)",
           borderTop: `2px solid ${COLORS.border}`,
           padding: "12px 14px 16px",
+          height: stableHeightPx ? `${stableHeightPx}px` : undefined,
           maxHeight: "70vh",
-          overflowY: "auto",
+          overflowY: "hidden",
           boxSizing: "border-box",
           transform: phase === "open" ? "translateY(0)" : "translateY(14px)",
           transition: "transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1)",
           willChange: "transform",
-          touchAction: "pan-y",
+          touchAction: "none",
           userSelect: "none",
           WebkitUserSelect: "none",
           boxShadow: `0 -8px 24px rgba(0, 0, 0, 0.6), 0 0 32px ${COLORS.primaryGlow}`,
@@ -731,8 +679,26 @@ function InventorySheet({
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 20 }}>🎒</span>
-            <span style={{ fontFamily: FONTS.display, fontSize: 11, letterSpacing: "0.16em" }}>
-              {t("inventory.title")}
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: FONTS.display, fontSize: 11, letterSpacing: "0.16em" }}>
+                {t("inventory.title")}
+              </span>
+              {movingItemId !== null && (
+                <span
+                  style={{
+                    ...pixelChip,
+                    padding: "4px 8px",
+                    fontFamily: FONTS.display,
+                    fontSize: 8,
+                    letterSpacing: "0.18em",
+                    background: "rgba(93, 208, 230, 0.12)",
+                    ...pixelBorder(COLORS.primary, 1),
+                    color: COLORS.primary,
+                  }}
+                >
+                  {t("inventory.editing")}
+                </span>
+              )}
             </span>
           </div>
           <button
@@ -803,7 +769,7 @@ function InventorySheet({
                   locked={tutorialPotionGate}
                   moving={movingItemId === p.id}
                   moveModeActive={tutorialPotionGate ? false : movingItemId !== null}
-                  onStartMove={tutorialPotionGate ? () => {} : () => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
+                  onStartMove={() => toggleMove(p.id)}
                   onToggleEquip={tutorialPotionGate ? () => {} : () => onEquipWeapon(equipped ? null : p.id)}
                   x={p.x}
                   y={p.y}
@@ -821,7 +787,7 @@ function InventorySheet({
                   locked={tutorialPotionGate}
                   moving={movingItemId === p.id}
                   moveModeActive={tutorialPotionGate ? false : movingItemId !== null}
-                  onStartMove={tutorialPotionGate ? () => {} : () => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
+                  onStartMove={() => toggleMove(p.id)}
                   x={p.x}
                   y={p.y}
                 />
@@ -832,15 +798,14 @@ function InventorySheet({
             return (
               <InventorySlotPotion
                 key={p.id}
-                onClick={onUsePotion}
+                onClick={() => onUsePotion(p.id)}
                 disabled={potionDisabled}
-                highlight={tutorialPotionGate ? isAllowed && canUsePotion : canUsePotion}
                 label={t("inventory.potion")}
-                tooltip={t("inventory.potionHint", { potions: hero.potions })}
+                tooltip={t("inventory.potionHint", { potions: hero.potionIds.length })}
                 moving={movingItemId === p.id}
                 moveModeActive={tutorialPotionGate ? false : movingItemId !== null}
-                onStartMove={tutorialPotionGate ? () => {} : () => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
-                tutorialTag={p.id === "potion-0"}
+                onStartMove={() => toggleMove(p.id)}
+                tutorialTag={p.id === allowedPotionId}
                 x={p.x}
                 y={p.y}
               />
@@ -1103,7 +1068,6 @@ function InventorySlotWeapon({
 function InventorySlotPotion({
   onClick,
   disabled,
-  highlight,
   label,
   tooltip,
   moving,
@@ -1115,7 +1079,6 @@ function InventorySlotPotion({
 }: {
   onClick: () => void;
   disabled: boolean;
-  highlight: boolean;
   label: string;
   tooltip: string;
   moving: boolean;
@@ -1162,7 +1125,7 @@ function InventorySlotPotion({
         ...inventorySlotBaseStyle(),
         background: "transparent",
         color: COLORS.text,
-        ...pixelBorder(moving ? COLORS.primary : highlight ? COLORS.primary : COLORS.borderDim, moving ? 2 : 1),
+        ...pixelBorder(moving ? COLORS.primary : COLORS.borderDim, moving ? 2 : 1),
         gridColumnStart: x + 1,
         gridRowStart: y + 1,
         zIndex: 1,

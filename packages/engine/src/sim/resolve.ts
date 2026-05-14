@@ -29,7 +29,8 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
   const tile = state.currentFloor.grid.get(cell);
   if (tile.kind === "item" && tile.payload && tile.payload.kind === "item") {
     const item = tile.payload.item;
-    if (!canAddItemToBag(state.hero.items, item)) {
+    const placed = placeNewItem(state.hero, item);
+    if (!placed) {
       return {
         state,
         events: [{ type: "ITEM_PICKUP_BLOCKED", cell, itemKind: item.kind, reason: "bag_full" }],
@@ -39,7 +40,7 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
       cell,
       emptyTile(`item-${state.turn}-${cell.x}-${cell.y}`),
     );
-    const nextHero = { ...state.hero, items: [...state.hero.items, item] };
+    const nextHero = { ...state.hero, items: [...state.hero.items, item], bagLayout: placed.layout };
     const nextMeta = { ...state.meta, score: state.meta.score + 50 };
     return {
       state: { ...state, hero: nextHero, meta: nextMeta, currentFloor: { ...state.currentFloor, grid: newGrid } },
@@ -84,14 +85,53 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
   }
 
   if (tile.rune === "bramble") {
-    let progress = nextHero.brambleProgress + 1;
-    let potions = nextHero.potions;
-    while (progress >= 3) {
-      potions += 1;
-      progress -= 3;
-      events.push({ type: "POTION_GAINED", potions });
+    const total = nextHero.brambleProgress + 1;
+    const gained = Math.floor(total / 3);
+    const progress = total % 3;
+
+    let potionIds = nextHero.potionIds;
+    let potionCounter = nextHero.potionCounter;
+    let bagLayout = { ...nextHero.bagLayout };
+
+    for (let i = progress; i < 2; i++) delete bagLayout[`leaf-${i}`];
+
+    for (let i = 0; i < gained; i++) {
+      const id = `potion-${potionCounter}`;
+      potionCounter += 1;
+      const placed = placeNewOneByOne(
+        {
+          ...nextHero,
+          brambleProgress: progress,
+          potionIds,
+          potionCounter,
+          bagLayout,
+        },
+        id,
+      );
+      if (!placed) continue;
+      potionIds = [...potionIds, id];
+      bagLayout = placed.layout;
+      events.push({ type: "POTION_GAINED", potions: potionIds.length });
     }
-    nextHero = { ...nextHero, brambleProgress: progress, potions };
+
+    for (let i = 0; i < progress; i++) {
+      const leafId = `leaf-${i}`;
+      if (bagLayout[leafId]) continue;
+      const placed = placeNewOneByOne(
+        {
+          ...nextHero,
+          brambleProgress: i,
+          potionIds,
+          potionCounter,
+          bagLayout,
+        },
+        leafId,
+      );
+      if (!placed) break;
+      bagLayout = placed.layout;
+    }
+
+    nextHero = { ...nextHero, brambleProgress: progress, potionIds, potionCounter, bagLayout };
   }
 
   switch (tile.rune) {
@@ -151,43 +191,8 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
   };
 }
 
-function canAddItemToBag(existing: readonly ItemInstance[], item: ItemInstance): boolean {
-  if (item.kind !== "sword" && item.kind !== "staff") return true;
-  const weapons = existing.filter((it) => it.kind === "sword" || it.kind === "staff");
-  const BAG_COLS = 4;
-  const BAG_ROWS = 3;
-  const occupied = Array.from({ length: BAG_ROWS }, () => Array.from({ length: BAG_COLS }, () => false));
-
-  const sorted = [...weapons].sort((a, b) => a.id.localeCompare(b.id));
-  for (const w of sorted) {
-    const dims = weaponDims(w.kind);
-    if (!placeFirstFit(occupied, BAG_COLS, BAG_ROWS, dims.w, dims.h)) return false;
-  }
-  const newDims = weaponDims(item.kind);
-  return placeFirstFit(occupied, BAG_COLS, BAG_ROWS, newDims.w, newDims.h);
-}
-
 function weaponDims(kind: "sword" | "staff"): { w: number; h: number } {
   return kind === "sword" ? { w: 1, h: 2 } : { w: 2, h: 1 };
-}
-
-function placeFirstFit(
-  occupied: boolean[][],
-  cols: number,
-  rows: number,
-  w: number,
-  h: number,
-): boolean {
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      if (!canPlace(occupied, cols, rows, x, y, w, h)) continue;
-      for (let yy = y; yy < y + h; yy++) {
-        for (let xx = x; xx < x + w; xx++) occupied[yy]![xx] = true;
-      }
-      return true;
-    }
-  }
-  return false;
 }
 
 function canPlace(
@@ -206,6 +211,86 @@ function canPlace(
     }
   }
   return true;
+}
+
+function occupy(occupied: boolean[][], x: number, y: number, w: number, h: number): void {
+  for (let yy = y; yy < y + h; yy++) {
+    for (let xx = x; xx < x + w; xx++) occupied[yy]![xx] = true;
+  }
+}
+
+function firstFitFrom(
+  occupied: boolean[][],
+  cols: number,
+  rows: number,
+  w: number,
+  h: number,
+  minY: number,
+): { x: number; y: number } | null {
+  for (let y = Math.max(0, Math.floor(minY)); y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (canPlace(occupied, cols, rows, x, y, w, h)) return { x, y };
+    }
+  }
+  return null;
+}
+
+function occupiedFromExactBagLayout(hero: RunState["hero"], excludeId?: string): boolean[][] | null {
+  const cols = 4;
+  const rows = 3;
+  const occupied = Array.from({ length: rows }, () => Array.from({ length: cols }, () => false));
+  const layout = hero.bagLayout;
+
+  for (const pid of hero.potionIds) {
+    if (pid === excludeId) continue;
+    const pos = layout[pid];
+    if (!pos) return null;
+    if (pos.x < 0 || pos.y < 0 || pos.x + 1 > cols || pos.y + 1 > rows) return null;
+    if (occupied[pos.y]![pos.x]!) return null;
+    occupied[pos.y]![pos.x] = true;
+  }
+  for (let i = 0; i < hero.brambleProgress; i++) {
+    const lid = `leaf-${i}`;
+    if (lid === excludeId) continue;
+    const pos = layout[lid];
+    if (!pos) continue;
+    if (pos.x < 0 || pos.y < 0 || pos.x + 1 > cols || pos.y + 1 > rows) return null;
+    if (occupied[pos.y]![pos.x]!) return null;
+    occupied[pos.y]![pos.x] = true;
+  }
+  for (const it of hero.items) {
+    if (it.kind !== "sword" && it.kind !== "staff") continue;
+    if (it.id === excludeId) continue;
+    const pos = layout[it.id];
+    if (!pos) return null;
+    const d = weaponDims(it.kind);
+    if (!canPlace(occupied, cols, rows, pos.x, pos.y, d.w, d.h)) return null;
+    occupy(occupied, pos.x, pos.y, d.w, d.h);
+  }
+
+  return occupied;
+}
+
+function placeNewOneByOne(hero: RunState["hero"], id: string): { layout: Record<string, { x: number; y: number }> } | null {
+  const cols = 4;
+  const rows = 3;
+  const occupied = occupiedFromExactBagLayout(hero);
+  if (!occupied) return null;
+  const spot = firstFitFrom(occupied, cols, rows, 1, 1, 0);
+  if (!spot) return null;
+  return { layout: { ...hero.bagLayout, [id]: spot } };
+}
+
+function placeNewItem(hero: RunState["hero"], item: ItemInstance): { layout: Record<string, { x: number; y: number }> } | null {
+  if (item.kind !== "sword" && item.kind !== "staff") return { layout: { ...hero.bagLayout } };
+  const cols = 4;
+  const rows = 3;
+  const occupied = occupiedFromExactBagLayout(hero);
+  if (!occupied) return null;
+  const dims = weaponDims(item.kind);
+  const spot = firstFitFrom(occupied, cols, rows, dims.w, dims.h, 0);
+  if (!spot) return null;
+  return { layout: { ...hero.bagLayout, [item.id]: spot } };
 }
 
 function canGainPassive(counts: Partial<Record<Rune, number>>, rune: Rune): boolean {

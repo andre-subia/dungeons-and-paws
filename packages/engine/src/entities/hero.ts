@@ -7,9 +7,11 @@ export type HeroState = {
   readonly hpMax: number;
   readonly level: number;
   readonly xp: number;
-  readonly potions: number;
+  readonly potionIds: readonly string[];
+  readonly potionCounter: number;
   readonly brambleProgress: number;
   readonly items: readonly ItemInstance[];
+  readonly bagLayout: Readonly<Record<string, { x: number; y: number }>>;
   readonly equippedWeaponId: string | null;
   readonly stride: number;
   readonly attack: number;
@@ -68,6 +70,7 @@ export function grantXp(hero: HeroState, amount: number): XpGainResult {
 }
 
 export function spawnHero(template: HeroTemplate, position: Cell): HeroState {
+  const potionIds = ["potion-0", "potion-1"];
   return {
     characterId: template.characterId,
     position,
@@ -75,9 +78,14 @@ export function spawnHero(template: HeroTemplate, position: Cell): HeroState {
     hpMax: template.hpMax,
     level: 1,
     xp: 0,
-    potions: 2,
+    potionIds,
+    potionCounter: potionIds.length,
     brambleProgress: 0,
     items: [],
+    bagLayout: {
+      "potion-0": { x: 0, y: 0 },
+      "potion-1": { x: 0, y: 1 },
+    },
     equippedWeaponId: null,
     stride: template.stride,
     attack: template.attack,

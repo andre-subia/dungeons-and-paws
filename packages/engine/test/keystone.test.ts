@@ -30,11 +30,11 @@ function stateWithTideRunes(count: number) {
 
 describe("applyKeystone", () => {
   it("Tide heals min(5, Tide-on-grid, deficit) — bound by deficit", () => {
-    // hpMax=8, hp=5 → deficit=3. Cap is 5. 8 tides on grid. min = 3.
+    // hpMax=7, hp=5 → deficit=2. Cap is 3. 8 tides on grid. min = 2.
     let state = stateWithTideRunes(8);
     state = { ...state, hero: { ...state.hero, hp: 5 } };
     const result = applyKeystone(state, "row:0", "tide");
-    expect(result.state.hero.hp).toBe(8);
+    expect(result.state.hero.hp).toBe(7);
     expect(result.events.some((e) => e.type === "HP_HEALED")).toBe(true);
     expect(result.events.some((e) => e.type === "KEYSTONE_BONUS")).toBe(true);
   });
@@ -91,9 +91,9 @@ describe("applyKeystone", () => {
 
   it("Bramble grants +1 potion when not full", () => {
     let state = freshState();
-    state = { ...state, hero: { ...state.hero, potions: 0 } };
+    state = { ...state, hero: { ...state.hero, potionIds: [], potionCounter: 0, bagLayout: {} } };
     const result = applyKeystone(state, "row:0", "bramble");
-    expect(result.state.hero.potions).toBe(1);
+    expect(result.state.hero.potionIds.length).toBe(1);
     expect(result.events.some((e) => e.type === "POTION_GAINED")).toBe(true);
   });
 

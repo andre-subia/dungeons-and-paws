@@ -44,15 +44,17 @@ export function applyInput(state: RunState, input: PlayerInput): TurnResult {
     case "MOVE":
       return applyMove(state, input.from, input.to);
     case "USE_POTION":
-      return applyUsePotion(state);
+      return applyUsePotion(state, input.potionId);
     case "EQUIP_WEAPON":
       return applyEquipWeapon(state, input.itemId);
     case "DROP_ITEM":
       return applyDropItem(state, input.itemId);
     case "DROP_POTION":
-      return applyDropPotion(state);
+      return applyDropPotion(state, input.potionId);
     case "DROP_LEAF":
       return applyDropLeaf(state);
+    case "SET_WEAPON_LAYOUT":
+      return applySetWeaponLayout(state, input.itemId, input.x, input.y);
     case "ABILITY":
       return reject(state, "ability_unimplemented", undefined, "ABILITY not implemented yet");
     case "END_FLOOR":
@@ -178,7 +180,6 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
       destEnemyId !== null &&
       currentFloor.exitRequiresKey &&
       !currentFloor.exitUnlocked &&
-      (currentFloor.keyPolicy === "assigned" || currentFloor.keyPolicy === "reinforcement") &&
       currentFloor.keyEnemyId === destEnemyId;
 
     const combat = canRangedAttack ? resolveCombatAtRanged(nextState, to) : resolveCombatAt(nextState, to);
@@ -323,25 +324,29 @@ function applyMove(state: RunState, from: Cell, to: Cell): TurnResult {
   return { state: nextState, events };
 }
 
-function applyUsePotion(state: RunState): TurnResult {
+function applyUsePotion(state: RunState, potionId: string): TurnResult {
   const { hero } = state;
-  if (hero.potions <= 0) return reject(state, "no_potions", undefined, "No potions");
+  if (hero.potionIds.length <= 0) return reject(state, "no_potions", undefined, "No potions");
   if (hero.hp >= hero.hpMax) return reject(state, "hp_full", undefined, "HP is already full");
+  if (!hero.potionIds.includes(potionId)) return reject(state, "potion_missing", undefined, "Potion id not owned");
 
   const events: GameEvent[] = [{ type: "TURN_STARTED", turn: state.turn + 1 }];
 
   const healAmount = 5;
   const healed = Math.min(healAmount, hero.hpMax - hero.hp);
+  const nextPotionIds = hero.potionIds.filter((id) => id !== potionId);
+  const nextBagLayout = { ...hero.bagLayout };
+  delete nextBagLayout[potionId];
   let nextState: RunState = {
     ...state,
-    hero: { ...hero, hp: hero.hp + healed, potions: hero.potions - 1 },
+    hero: { ...hero, hp: hero.hp + healed, potionIds: nextPotionIds, bagLayout: nextBagLayout },
   };
 
   events.push({ type: "HP_HEALED", amount: healed });
   events.push({
     type: "POTION_USED",
     healed,
-    potions: nextState.hero.potions,
+    potions: nextState.hero.potionIds.length,
   });
 
   nextState = {
@@ -355,7 +360,7 @@ function applyUsePotion(state: RunState): TurnResult {
   for (const e of enemyTurn.events) events.push(e);
 
   if (nextState.outcome === "death") {
-    nextState = { ...nextState, inputLog: [...nextState.inputLog, { type: "USE_POTION" }] };
+    nextState = { ...nextState, inputLog: [...nextState.inputLog, { type: "USE_POTION", potionId }] };
     return { state: nextState, events };
   }
 
@@ -368,7 +373,7 @@ function applyUsePotion(state: RunState): TurnResult {
   for (const e of failsafe.events) events.push(e);
 
   if (nextState.outcome === "death") {
-    nextState = { ...nextState, inputLog: [...nextState.inputLog, { type: "USE_POTION" }] };
+    nextState = { ...nextState, inputLog: [...nextState.inputLog, { type: "USE_POTION", potionId }] };
     return { state: nextState, events };
   }
 
@@ -392,7 +397,7 @@ function applyUsePotion(state: RunState): TurnResult {
   nextState = spawnResult.state;
   for (const e of spawnResult.events) events.push(e);
 
-  nextState = { ...nextState, inputLog: [...nextState.inputLog, { type: "USE_POTION" }] };
+  nextState = { ...nextState, inputLog: [...nextState.inputLog, { type: "USE_POTION", potionId }] };
   return { state: nextState, events };
 }
 
@@ -440,7 +445,9 @@ function applyDropItem(state: RunState, itemId: string): TurnResult {
 
   const nextItems = hero.items.filter((it) => it.id !== itemId);
   const nextEquipped = hero.equippedWeaponId === itemId ? null : hero.equippedWeaponId;
-  const nextHero = { ...hero, items: nextItems, equippedWeaponId: nextEquipped };
+  const nextLayout = { ...hero.bagLayout };
+  delete nextLayout[itemId];
+  const nextHero = { ...hero, items: nextItems, equippedWeaponId: nextEquipped, bagLayout: nextLayout };
 
   const events: GameEvent[] = [{ type: "ITEM_DROPPED", itemKind: item.kind }];
   if (nextEquipped === null && hero.equippedWeaponId === itemId) {
@@ -455,13 +462,16 @@ function applyDropItem(state: RunState, itemId: string): TurnResult {
   return { state: nextState, events };
 }
 
-function applyDropPotion(state: RunState): TurnResult {
+function applyDropPotion(state: RunState, potionId: string): TurnResult {
   const hero = state.hero;
-  if (hero.potions <= 0) return { state, events: [] };
+  if (!hero.potionIds.includes(potionId)) return { state, events: [] };
+  const nextPotionIds = hero.potionIds.filter((id) => id !== potionId);
+  const nextBagLayout = { ...hero.bagLayout };
+  delete nextBagLayout[potionId];
   const nextState: RunState = {
     ...state,
-    hero: { ...hero, potions: hero.potions - 1 },
-    inputLog: [...state.inputLog, { type: "DROP_POTION" }],
+    hero: { ...hero, potionIds: nextPotionIds, bagLayout: nextBagLayout },
+    inputLog: [...state.inputLog, { type: "DROP_POTION", potionId }],
   };
   return { state: nextState, events: [] };
 }
@@ -473,6 +483,67 @@ function applyDropLeaf(state: RunState): TurnResult {
     ...state,
     hero: { ...hero, brambleProgress: hero.brambleProgress - 1 },
     inputLog: [...state.inputLog, { type: "DROP_LEAF" }],
+  };
+  return { state: nextState, events: [] };
+}
+
+function applySetWeaponLayout(state: RunState, itemId: string, x: number, y: number): TurnResult {
+  const hero = state.hero;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return { state, events: [] };
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const cols = 4;
+  const rows = 3;
+
+  const isPotion = itemId.startsWith("potion-");
+  const isLeaf = itemId.startsWith("leaf-");
+  const item = isPotion || isLeaf ? null : hero.items.find((it) => it.id === itemId);
+  if (!isPotion && !isLeaf) {
+    if (!item) return { state, events: [] };
+    if (item.kind !== "sword" && item.kind !== "staff") return { state, events: [] };
+  }
+  const dims =
+    isPotion || isLeaf ? { w: 1, h: 1 } : item!.kind === "sword" ? { w: 1, h: 2 } : { w: 2, h: 1 };
+  if (ix < 0 || iy < 0 || ix + dims.w > cols || iy + dims.h > rows) return { state, events: [] };
+
+  const occupied = Array.from({ length: rows }, () => Array.from({ length: cols }, () => false));
+  for (const pid of hero.potionIds) {
+    if (pid === itemId) continue;
+    const pos = hero.bagLayout[pid];
+    if (!pos) return { state, events: [] };
+    if (pos.x < 0 || pos.y < 0 || pos.x + 1 > cols || pos.y + 1 > rows) return { state, events: [] };
+    occupied[pos.y]![pos.x] = true;
+  }
+  for (let i = 0; i < hero.brambleProgress; i++) {
+    const lid = `leaf-${i}`;
+    if (lid === itemId) continue;
+    const pos = hero.bagLayout[lid];
+    if (!pos) return { state, events: [] };
+    if (pos.x < 0 || pos.y < 0 || pos.x + 1 > cols || pos.y + 1 > rows) return { state, events: [] };
+    occupied[pos.y]![pos.x] = true;
+  }
+  for (const it of hero.items) {
+    if (it.id === itemId) continue;
+    if (it.kind !== "sword" && it.kind !== "staff") continue;
+    const pos = hero.bagLayout[it.id];
+    if (!pos) return { state, events: [] };
+    const d = it.kind === "sword" ? { w: 1, h: 2 } : { w: 2, h: 1 };
+    if (pos.x < 0 || pos.y < 0 || pos.x + d.w > cols || pos.y + d.h > rows) return { state, events: [] };
+    for (let yy = pos.y; yy < pos.y + d.h; yy++) {
+      for (let xx = pos.x; xx < pos.x + d.w; xx++) occupied[yy]![xx] = true;
+    }
+  }
+  for (let yy = iy; yy < iy + dims.h; yy++) {
+    for (let xx = ix; xx < ix + dims.w; xx++) {
+      if (occupied[yy]![xx]!) return { state, events: [] };
+    }
+  }
+
+  const nextLayout = { ...hero.bagLayout, [itemId]: { x: ix, y: iy } };
+  const nextState: RunState = {
+    ...state,
+    hero: { ...hero, bagLayout: nextLayout },
+    inputLog: [...state.inputLog, { type: "SET_WEAPON_LAYOUT", itemId, x: ix, y: iy }],
   };
   return { state: nextState, events: [] };
 }

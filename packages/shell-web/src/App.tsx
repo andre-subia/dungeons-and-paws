@@ -606,7 +606,10 @@ export function App() {
       }
       if (e.key === "2") {
         e.preventDefault();
-        const ok = useRunStore.getState().usePotion();
+        const store = useRunStore.getState();
+        const potionId = store.state.hero.potionIds[0];
+        if (!potionId) return;
+        const ok = store.usePotion(potionId);
         if (ok && hapticsEnabled) {
           trigger([
             { duration: 30 },
