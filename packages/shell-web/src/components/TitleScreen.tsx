@@ -29,7 +29,6 @@ export function TitleScreen({
   onStart,
   onOpenHelp,
   onOpenSettings,
-  onOpenLeaderboard,
   onOpenName,
 }: {
   playerName: string;
@@ -38,7 +37,6 @@ export function TitleScreen({
   onStart: () => void;
   onOpenHelp: () => void;
   onOpenSettings: () => void;
-  onOpenLeaderboard: () => void;
   onOpenName: () => void;
 }) {
   const challengers = topRuns.slice(0, 5);
@@ -115,18 +113,6 @@ export function TitleScreen({
           }}
         >
           <div style={sectionLabel}>{t("title.runsHeader")}</div>
-          <button
-            onClick={onOpenLeaderboard}
-            style={{
-              ...pixelChip,
-              fontFamily: FONTS.display,
-              fontSize: 9,
-              letterSpacing: "0.18em",
-              padding: "5px 9px",
-            }}
-          >
-            {t("title.menuLeaderboard")}
-          </button>
         </div>
         {challengers.length > 0 ? <ChallengerStrip challengers={challengers} /> : <RunsEmptyState />}
       </div>
@@ -146,7 +132,6 @@ export function TitleScreen({
       <MenuFooter
         onOpenHelp={onOpenHelp}
         onOpenSettings={onOpenSettings}
-        onOpenLeaderboard={onOpenLeaderboard}
       />
     </div>
   );
@@ -506,11 +491,9 @@ function ChallengerCard({
 function MenuFooter({
   onOpenHelp,
   onOpenSettings,
-  onOpenLeaderboard,
 }: {
   onOpenHelp: () => void;
   onOpenSettings: () => void;
-  onOpenLeaderboard: () => void;
 }) {
   return (
     <div
@@ -523,9 +506,6 @@ function MenuFooter({
     >
       <button onClick={onOpenHelp} style={{ ...pixelButtonGhost }}>
         📜 {t("title.menuHelp")}
-      </button>
-      <button onClick={onOpenLeaderboard} style={{ ...pixelButtonGhost }}>
-        🌎 {t("title.menuLeaderboard")}
       </button>
       <button onClick={onOpenSettings} style={{ ...pixelButtonGhost }}>
         ⚙ {t("title.menuSettings")}

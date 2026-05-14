@@ -42,6 +42,7 @@ const DEFAULT_HAPTICS_ENABLED = true;
 const DEFAULT_SWIPE_SENSITIVITY = 1.25;
 const DEFAULT_LEGAL_MOVE_OPACITY = 0.4;
 const DEFAULT_PLAYER_NAME = "";
+const TUTORIAL_SEEN_KEY = "gridlore:tutorialSeen:v1";
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? "";
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? "";
@@ -323,7 +324,6 @@ export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
   const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, DEFAULT_HAPTICS_ENABLED));
   const [swipeSensitivity, setSwipeSensitivity] = useState(readSwipeSensitivity);
@@ -334,8 +334,6 @@ export function App() {
   const [nameDraft, setNameDraft] = useState(() => readPlayerName());
   const [pendingStartAfterName, setPendingStartAfterName] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
-  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [screen, setScreen] = useState<"title" | "playing">("title");
   const lastRecordedRef = useRef<string>("");
   const { trigger } = useWebHaptics();
@@ -344,20 +342,25 @@ export function App() {
   const outcome = useRunStore((s) => s.state.outcome);
   const seed = useRunStore((s) => s.state.seed);
   const turn = useRunStore((s) => s.state.turn);
+  const lastEvents = useRunStore((s) => s.lastEvents);
   const reset = useRunStore((s) => s.reset);
+  const [tutorial, setTutorial] = useState<{ mode: "intro" | "bag"; step: number } | null>(null);
+  const [tutorialPendingBag, setTutorialPendingBag] = useState(false);
+  const [bagPotionConsumed, setBagPotionConsumed] = useState(false);
+  const tutorialActive = tutorial !== null;
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
+
+  const closeInventory = useCallback((force = false) => {
+    window.dispatchEvent(new CustomEvent("ui:closeInventory", { detail: { force } }));
+  }, []);
 
   const refreshLeaderboard = useCallback(async () => {
     if (!hasLeaderboardBackend()) return;
-    setLeaderboardLoading(true);
-    setLeaderboardError(null);
     try {
       const next = await fetchGlobalLeaderboard(20);
       setLeaderboard(next);
-    } catch (e) {
-      setLeaderboardError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLeaderboardLoading(false);
+    } catch {
+      setLeaderboard([]);
     }
   }, []);
 
@@ -380,10 +383,21 @@ export function App() {
     const floor = floorIndex + 1;
     submitScore({ playerId, name, score, seed, outcome, floor })
       .then(() => refreshLeaderboard())
-      .catch((e) => {
-        setLeaderboardError(e instanceof Error ? e.message : String(e));
-      });
+      .catch(() => {});
   }, [floorIndex, outcome, playerId, playerName, refreshLeaderboard, score, seed]);
+
+  const resetTutorial = useCallback(() => {
+    try {
+      localStorage.removeItem(TUTORIAL_SEEN_KEY);
+    } catch {}
+    closeInventory(true);
+    setTutorialPendingBag(false);
+    setTutorial(null);
+    reset(newSeed());
+    setHelpOpen(false);
+    setSettingsOpen(false);
+    setScreen("title");
+  }, [closeInventory, reset]);
 
   const startRun = useCallback(() => {
     if (outcome !== "in_progress") {
@@ -413,6 +427,12 @@ export function App() {
 
   const attemptMove = useCallback(
     (to: Cell, source: "tap" | "keyboard") => {
+      if (tutorialActive && tutorial?.mode === "intro" && tutorial.step === 0) {
+        setTutorial({ mode: "intro", step: 1 });
+        return;
+      }
+      const allowDuringTutorial = tutorial?.mode === "intro" && tutorial.step === 2;
+      if (tutorialActive && !allowDuringTutorial) return;
       const store = useRunStore.getState();
       const accepted = store.move(to);
       if (!accepted) return;
@@ -436,10 +456,75 @@ export function App() {
 
       if (source === "tap") trigger();
     },
-    [hapticsEnabled, trigger],
+    [hapticsEnabled, trigger, tutorial, tutorialActive],
   );
 
   const onGridMove = useCallback((cell: Cell) => attemptMove(cell, "tap"), [attemptMove]);
+
+  useEffect(() => {
+    if (screen !== "playing") return;
+    if (outcome !== "in_progress") return;
+    if (floorIndex !== 0) return;
+    if (turn !== 0) return;
+    try {
+      const seen = localStorage.getItem(TUTORIAL_SEEN_KEY);
+      if (seen === "1") return;
+    } catch {}
+    useRunStore.getState().boostTutorialPotions(3);
+    setTutorial({ mode: "intro", step: 0 });
+    setTutorialPendingBag(false);
+    setBagPotionConsumed(false);
+  }, [floorIndex, outcome, screen, turn]);
+
+  useEffect(() => {
+    if (screen !== "playing") return;
+    if (outcome !== "in_progress") return;
+    if (floorIndex !== 0) return;
+    if (!tutorialPendingBag) return;
+    if (tutorialActive) return;
+    try {
+      const seen = localStorage.getItem(TUTORIAL_SEEN_KEY);
+      if (seen === "1") return;
+    } catch {}
+
+    const heroDamaged = lastEvents.some((e) => e.type === "HERO_DAMAGED");
+    if (!heroDamaged) return;
+
+    useRunStore.getState().boostTutorialPotions(3);
+    closeInventory(true);
+    setTutorial({ mode: "bag", step: 0 });
+    setBagPotionConsumed(false);
+    setTutorialPendingBag(false);
+  }, [closeInventory, floorIndex, lastEvents, outcome, screen, tutorialActive, tutorialPendingBag]);
+
+  useEffect(() => {
+    if (screen !== "playing") return;
+    if (!tutorial || tutorial.mode !== "intro") return;
+    if (tutorial.step !== 2) return;
+    const heroAttacked = lastEvents.some(
+      (e) => e.type === "DAMAGE_DEALT" && e.source === "hero" && e.target !== "hero" && e.amount > 0,
+    );
+    if (!heroAttacked) return;
+    closeInventory(true);
+    setTutorialPendingBag(true);
+    setTutorial(null);
+  }, [closeInventory, lastEvents, screen, tutorial]);
+
+  useEffect(() => {
+    if (screen !== "playing") return;
+    if (!tutorial || tutorial.mode !== "bag") return;
+    if (tutorial.step !== 1) return;
+    if (bagPotionConsumed) return;
+    const used = lastEvents.some((e) => e.type === "POTION_USED");
+    if (!used) return;
+    setBagPotionConsumed(true);
+    try {
+      localStorage.setItem(TUTORIAL_SEEN_KEY, "1");
+    } catch {}
+    closeInventory(true);
+    setTutorialPendingBag(false);
+    setTutorial(null);
+  }, [bagPotionConsumed, closeInventory, lastEvents, screen, tutorial, tutorialPendingBag]);
 
   useEffect(() => {
     if (screen !== "playing") return;
@@ -650,6 +735,15 @@ export function App() {
       const dir = directionFromDelta(dx, dy, thresholds.cellPx, thresholds.thresholdPx, thresholds.thresholdCells);
       if (!dir || (dir.dx === 0 && dir.dy === 0)) return;
 
+      if (tutorialActive && tutorial?.mode === "intro" && tutorial.step === 0) {
+        prevent();
+        setTutorial({ mode: "intro", step: 1 });
+        return;
+      }
+
+      const allowDuringTutorial = tutorial?.mode === "intro" && tutorial.step === 2;
+      if (tutorialActive && !allowDuringTutorial) return;
+
       const store = useRunStore.getState();
       const state = store.state;
       if (state.outcome !== "in_progress") return;
@@ -798,7 +892,7 @@ export function App() {
       window.removeEventListener("touchend", onTouchEnd, true);
       window.removeEventListener("touchcancel", onTouchCancel, true);
     };
-  }, [hapticsEnabled, trigger, swipeSensitivity, screen]);
+  }, [hapticsEnabled, trigger, swipeSensitivity, screen, tutorial, tutorialActive]);
 
   function updateAnimSpeed(v: number) {
     const clamped = Math.max(0.2, Math.min(2, v));
@@ -881,19 +975,11 @@ export function App() {
 
   const openHelp = () => {
     setSettingsOpen(false);
-    setLeaderboardOpen(false);
     setHelpOpen(true);
   };
   const openSettings = () => {
     setHelpOpen(false);
-    setLeaderboardOpen(false);
     setSettingsOpen(true);
-  };
-  const openLeaderboard = () => {
-    setSettingsOpen(false);
-    setHelpOpen(false);
-    setLeaderboardOpen(true);
-    refreshLeaderboard();
   };
   const openName = () => setNamePromptOpen(true);
 
@@ -955,7 +1041,6 @@ export function App() {
           onStart={startRunWithRequiredName}
           onOpenHelp={openHelp}
           onOpenSettings={openSettings}
-          onOpenLeaderboard={openLeaderboard}
           onOpenName={openName}
         />
       ) : (
@@ -965,8 +1050,6 @@ export function App() {
             score={score}
             onMenu={returnToMenu}
             onSettings={openSettings}
-            onLeaderboard={openLeaderboard}
-            onHelp={openHelp}
           />
           <GridView
             animSpeed={animSpeed}
@@ -977,8 +1060,53 @@ export function App() {
             playerName={playerName}
             onTryAgain={tryAgain}
             onMainMenu={returnToMenu}
+            tutorialPotionGate={tutorial?.mode === "bag" && !bagPotionConsumed}
           />
         </>
+      )}
+
+      {tutorial !== null && screen === "playing" && (
+        <TutorialOverlay
+          tutorial={tutorial}
+          nextDisabled={tutorial.mode === "bag" && tutorial.step === 1 && !bagPotionConsumed}
+          nextLabel={
+            tutorial.mode === "bag" && tutorial.step === 1 && !bagPotionConsumed ? t("tutorial.usePotion") : undefined
+          }
+          onNext={() =>
+            setTutorial((cur) => {
+              if (!cur) return null;
+              const steps = cur.mode === "intro" ? INTRO_TUTORIAL_STEPS : BAG_TUTORIAL_STEPS;
+              const next = cur.step + 1;
+              if (cur.mode === "bag" && next === 1) {
+                window.dispatchEvent(new Event("ui:openInventory"));
+              }
+              if (next >= steps.length) {
+                if (cur.mode === "intro") {
+                  closeInventory(true);
+                  setTutorialPendingBag(true);
+                  return null;
+                }
+                try {
+                  localStorage.setItem(TUTORIAL_SEEN_KEY, "1");
+                } catch {}
+                closeInventory(true);
+                return null;
+              }
+              return { ...cur, step: next };
+            })
+          }
+          onSkip={() => {
+            if (tutorial.mode === "bag" && !bagPotionConsumed) {
+              useRunStore.getState().capTutorialPotions(2);
+            }
+            try {
+              localStorage.setItem(TUTORIAL_SEEN_KEY, "1");
+            } catch {}
+            closeInventory(true);
+            setTutorialPendingBag(false);
+            setTutorial(null);
+          }}
+        />
       )}
 
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
@@ -996,17 +1124,8 @@ export function App() {
           onHaptics={updateHapticsEnabled}
           onEditName={() => setNamePromptOpen(true)}
           onReset={resetSettings}
+          onResetTutorial={resetTutorial}
           localeFlag={localeFlag}
-        />
-      )}
-      {leaderboardOpen && (
-        <LeaderboardModal
-          loading={leaderboardLoading}
-          error={leaderboardError}
-          entries={leaderboard}
-          configured={hasLeaderboardBackend()}
-          onClose={() => setLeaderboardOpen(false)}
-          onRefresh={refreshLeaderboard}
         />
       )}
       {namePromptOpen && (
@@ -1027,18 +1146,15 @@ function PlayingHeader({
   score,
   onMenu,
   onSettings,
-  onLeaderboard,
-  onHelp,
 }: {
   floorIndex: number;
   score: number;
   onMenu: () => void;
   onSettings: () => void;
-  onLeaderboard: () => void;
-  onHelp: () => void;
 }) {
   return (
     <header
+      data-tutorial="header"
       style={{
         padding: "8px 10px 6px",
         display: "flex",
@@ -1053,6 +1169,7 @@ function PlayingHeader({
       }}
     >
       <button
+        data-tutorial="menu"
         onClick={onMenu}
         title={t("runOver.menu")}
         style={{
@@ -1087,32 +1204,7 @@ function PlayingHeader({
       </div>
       <div style={{ display: "flex", gap: 6 }}>
         <button
-          onClick={onLeaderboard}
-          title={t("header.leaderboardLabel")}
-          style={{
-            ...pixelChip,
-            padding: "6px 10px",
-            fontFamily: FONTS.body,
-            fontSize: 14,
-            letterSpacing: 0,
-          }}
-        >
-          🌎
-        </button>
-        <button
-          onClick={onHelp}
-          title={t("header.helpLabel")}
-          style={{
-            ...pixelChip,
-            padding: "6px 10px",
-            fontFamily: FONTS.body,
-            fontSize: 14,
-            letterSpacing: 0,
-          }}
-        >
-          📜
-        </button>
-        <button
+          data-tutorial="settings"
           onClick={onSettings}
           title={t("header.settingsLabel")}
           style={{
@@ -1127,6 +1219,219 @@ function PlayingHeader({
         </button>
       </div>
     </header>
+  );
+}
+
+const INTRO_TUTORIAL_STEPS = [
+  { target: "[data-grid-host='true']", titleKey: "tutorial.intro1.title", bodyKey: "tutorial.intro1.body" },
+  { target: "[data-tutorial='hp']", titleKey: "tutorial.intro2.title", bodyKey: "tutorial.intro2.body" },
+  { target: "[data-grid-host='true']", titleKey: "tutorial.intro3.title", bodyKey: "tutorial.intro3.body" },
+] as const;
+
+const BAG_TUTORIAL_STEPS = [
+  { target: "[data-tutorial='bag']", titleKey: "tutorial.bag1.title", bodyKey: "tutorial.bag1.body" },
+  { target: "[data-tutorial='potion']", titleKey: "tutorial.bag2.title", bodyKey: "tutorial.bag2.body" },
+] as const;
+
+function TutorialOverlay({
+  tutorial,
+  nextDisabled,
+  nextLabel,
+  onNext,
+  onSkip,
+}: {
+  tutorial: { mode: "intro" | "bag"; step: number };
+  nextDisabled?: boolean;
+  nextLabel?: string;
+  onNext: () => void;
+  onSkip: () => void;
+}) {
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const steps = tutorial.mode === "intro" ? INTRO_TUTORIAL_STEPS : BAG_TUTORIAL_STEPS;
+  const step = Math.max(0, Math.min(steps.length - 1, tutorial.step));
+  const conf = steps[step]!;
+  const dockTop = rect ? rect.y > window.innerHeight * 0.55 : false;
+  const interceptTarget =
+    (tutorial.mode === "intro" && (step === 0 || step === 1)) || (tutorial.mode === "bag" && step === 0);
+
+  useEffect(() => {
+    const update = () => {
+      const el = document.querySelector(conf.target);
+      if (!el || !(el instanceof HTMLElement)) {
+        setRect(null);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      const pad = 6;
+      setRect({ x: r.left - pad, y: r.top - pad, w: r.width + pad * 2, h: r.height + pad * 2 });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, { passive: true });
+    const id = window.setInterval(update, 120);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update);
+      window.clearInterval(id);
+    };
+  }, [conf.target]);
+
+  return (
+    <div
+      data-swipe-exempt="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9,
+        pointerEvents: "none",
+      }}
+    >
+      {rect ? (
+        <>
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              right: 0,
+              height: rect.y,
+              background: "rgba(8, 5, 3, 0.72)",
+              pointerEvents: "auto",
+            }}
+          />
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: rect.y,
+              width: rect.x,
+              height: rect.h,
+              background: "rgba(8, 5, 3, 0.72)",
+              pointerEvents: "auto",
+            }}
+          />
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: rect.x + rect.w,
+              top: rect.y,
+              right: 0,
+              height: rect.h,
+              background: "rgba(8, 5, 3, 0.72)",
+              pointerEvents: "auto",
+            }}
+          />
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: rect.y + rect.h,
+              right: 0,
+              bottom: 0,
+              background: "rgba(8, 5, 3, 0.72)",
+              pointerEvents: "auto",
+            }}
+          />
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: rect.x,
+              top: rect.y,
+              width: rect.w,
+              height: rect.h,
+              borderRadius: 12,
+              boxShadow: `0 0 0 2px ${COLORS.win}, 0 0 34px rgba(93, 208, 230, 0.35)`,
+              pointerEvents: "none",
+              zIndex: 1,
+            }}
+          />
+          {interceptTarget && (
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="tutorial target"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                if (tutorial.mode === "bag" && step === 0) {
+                  window.dispatchEvent(new Event("ui:openInventory"));
+                }
+                onNext();
+              }}
+              style={{
+                position: "absolute",
+                left: rect.x,
+                top: rect.y,
+                width: rect.w,
+                height: rect.h,
+                borderRadius: 12,
+                background: "transparent",
+                pointerEvents: "auto",
+                zIndex: 2,
+              }}
+            />
+          )}
+        </>
+      ) : (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(8, 5, 3, 0.72)",
+            pointerEvents: "auto",
+          }}
+        />
+      )}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          ...(dockTop ? { top: "env(safe-area-inset-top)" } : { bottom: "env(safe-area-inset-bottom)" }),
+          padding: 16,
+          display: "grid",
+          placeItems: "center",
+          boxSizing: "border-box",
+          pointerEvents: "auto",
+          zIndex: 3,
+        }}
+      >
+        <div
+          style={{
+            width: "min(560px, 100%)",
+            background: "rgba(20, 14, 8, 0.9)",
+            backdropFilter: "blur(18px) saturate(1.25)",
+            WebkitBackdropFilter: "blur(18px) saturate(1.25)",
+            ...pixelBorder(COLORS.win, 2),
+            padding: "16px 16px 14px",
+            color: COLORS.text,
+            boxShadow: "0 0 0 4px rgba(0, 0, 0, 0.4)",
+          }}
+        >
+          <div style={{ ...sectionLabel, color: COLORS.win }}>{t(conf.titleKey)}</div>
+          <div style={{ marginTop: 10, fontFamily: FONTS.body, fontSize: 13, color: COLORS.text }}>
+            {t(conf.bodyKey)}
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 14, flexWrap: "wrap" }}>
+            <button onClick={onSkip} style={{ ...pixelButtonGhost, padding: "10px 16px" }}>
+              {t("tutorial.skip")}
+            </button>
+            <button
+              onClick={onNext}
+              disabled={nextDisabled === true}
+              style={{ ...pixelButtonPrimary, fontSize: 11, opacity: nextDisabled ? 0.6 : 1 }}
+            >
+              {nextLabel ?? (step >= steps.length - 1 ? t("tutorial.done") : t("tutorial.next"))}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1251,6 +1556,7 @@ function SettingsModal({
   onHaptics,
   onEditName,
   onReset,
+  onResetTutorial,
   localeFlag,
 }: {
   animSpeed: number;
@@ -1265,6 +1571,7 @@ function SettingsModal({
   onHaptics: (v: boolean) => void;
   onEditName: () => void;
   onReset: () => void;
+  onResetTutorial: () => void;
   localeFlag: (l: ReturnType<typeof getLocale>) => string;
 }) {
   return (
@@ -1341,6 +1648,15 @@ function SettingsModal({
         >
           {t("settings.reset")}
         </button>
+
+        {import.meta.env.DEV && (
+          <button
+            onClick={onResetTutorial}
+            style={{ ...pixelButtonGhost, padding: "10px 12px", fontSize: 13, ...pixelBorder(COLORS.win, 1) }}
+          >
+            {t("settings.resetTutorial")}
+          </button>
+        )}
       </div>
     </ModalShell>
   );
@@ -1386,88 +1702,6 @@ function SliderRow({
         style={{ width: "100%", accentColor: COLORS.primary }}
       />
     </div>
-  );
-}
-
-function LeaderboardModal({
-  loading,
-  error,
-  entries,
-  configured,
-  onClose,
-  onRefresh,
-}: {
-  loading: boolean;
-  error: string | null;
-  entries: LeaderboardEntry[];
-  configured: boolean;
-  onClose: () => void;
-  onRefresh: () => void;
-}) {
-  const refreshAction = configured ? (
-    <button
-      onClick={onRefresh}
-      style={{
-        ...pixelChip,
-        fontFamily: FONTS.display,
-        fontSize: 8,
-        letterSpacing: "0.18em",
-        padding: "6px 10px",
-      }}
-    >
-      ⟳ {t("leaderboard.refresh")}
-    </button>
-  ) : undefined;
-
-  return (
-    <ModalShell title={t("leaderboard.title")} onClose={onClose} rightActions={refreshAction}>
-      <div style={{ display: "grid", gap: 10, fontSize: 14, lineHeight: 1.45 }}>
-        {!configured ? (
-          <div style={{ color: COLORS.textMuted }}>{t("settings.leaderboardNotConfigured")}</div>
-        ) : loading ? (
-          <div style={{ color: COLORS.textMuted }}>{t("settings.leaderboardLoading")}</div>
-        ) : error ? (
-          <div style={{ color: COLORS.death }}>{t("settings.leaderboardError")}</div>
-        ) : entries.length === 0 ? (
-          <div style={{ color: COLORS.textMuted }}>{t("settings.leaderboardEmpty")}</div>
-        ) : (
-          <div style={{ display: "grid", gap: 6 }}>
-            {entries.slice(0, 20).map((e, idx) => {
-              const isPodium = idx < 3;
-              const podiumColor = idx === 0 ? COLORS.win : idx === 1 ? COLORS.text : COLORS.heart;
-              return (
-                <div
-                  key={`${e.ts}-${e.seed}-${idx}`}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "32px 1fr auto",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "6px 10px",
-                    background: isPodium ? "rgba(255, 52, 100, 0.08)" : "rgba(255, 255, 255, 0.02)",
-                    ...pixelBorder(isPodium ? podiumColor : COLORS.borderDim, 1),
-                  }}
-                >
-                  <div
-                    style={{
-                      fontFamily: FONTS.display,
-                      fontSize: 10,
-                      color: isPodium ? podiumColor : COLORS.textMuted,
-                    }}
-                  >
-                    #{idx + 1}
-                  </div>
-                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.name}</div>
-                  <div style={{ fontFamily: FONTS.mono, color: COLORS.textMuted, fontSize: 13 }}>
-                    🏆 {e.score} · {t("hud.floorLabel")} {e.floor}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </ModalShell>
   );
 }
 

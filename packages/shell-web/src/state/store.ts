@@ -25,6 +25,10 @@ export type RunStore = {
   equipWeapon: (itemId: string | null) => boolean;
   /** Drop a weapon from inventory. Returns true if accepted. */
   dropItem: (itemId: string) => boolean;
+  /** Tutorial-only: set starting potions to at least N. */
+  boostTutorialPotions: (minPotions: number) => void;
+  /** Tutorial-only: cap potions down to at most N. */
+  capTutorialPotions: (maxPotions: number) => void;
   /** Reset to a fresh run with a new seed. */
   reset: (seed?: string) => void;
 };
@@ -69,6 +73,29 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const result = applyInput(state, { type: "DROP_ITEM", itemId });
     set({ state: result.state, lastEvents: result.events });
     return result.state !== state;
+  },
+  boostTutorialPotions(minPotions) {
+    if (!Number.isFinite(minPotions)) return;
+    const n = Math.max(0, Math.floor(minPotions));
+    set((prev) => {
+      const s = prev.state;
+      if (s.outcome !== "in_progress") return prev;
+      if (s.currentFloor.index !== 0) return prev;
+      if (s.turn !== 0) return prev;
+      if (s.hero.potions >= n) return prev;
+      return { ...prev, state: { ...s, hero: { ...s.hero, potions: n } } };
+    });
+  },
+  capTutorialPotions(maxPotions) {
+    if (!Number.isFinite(maxPotions)) return;
+    const n = Math.max(0, Math.floor(maxPotions));
+    set((prev) => {
+      const s = prev.state;
+      if (s.outcome !== "in_progress") return prev;
+      if (s.currentFloor.index !== 0) return prev;
+      if (s.hero.potions <= n) return prev;
+      return { ...prev, state: { ...s, hero: { ...s.hero, potions: n } } };
+    });
   },
   reset(seed = DEFAULT_SEED) {
     set({ state: freshRun(seed), lastEvents: [] });

@@ -44,22 +44,27 @@ export function HUD({
   playerName,
   onTryAgain,
   onMainMenu,
+  tutorialPotionGate,
 }: {
   playerName: string;
   onTryAgain: () => void;
   onMainMenu: () => void;
+  tutorialPotionGate?: boolean;
 }) {
   const [, bump] = useState(0);
   const state = useRunStore((s) => s.state);
   const usePotion = useRunStore((s) => s.usePotion);
   const equipWeapon = useRunStore((s) => s.equipWeapon);
   const dropItem = useRunStore((s) => s.dropItem);
+  const boostTutorialPotions = useRunStore((s) => s.boostTutorialPotions);
   const { trigger } = useWebHaptics();
   const events = useRunStore((s) => s.lastEvents);
   const lastEvent = pickPrimaryEvent(events);
   const [invOpen, setInvOpen] = useState(false);
   const ignoreInvClickRef = useRef(false);
   const bagSwipeRef = useRef<{ pointerId: number; startX: number; startY: number; active: boolean } | null>(null);
+  const tutorialGateRef = useRef(false);
+  tutorialGateRef.current = tutorialPotionGate === true;
 
   const { hero, currentFloor, meta, turn, outcome } = state;
   const lattices = currentFloor.lattices;
@@ -71,15 +76,38 @@ export function HUD({
 
   useEffect(() => subscribeLocaleChange(() => bump((x) => x + 1)), []);
   useEffect(() => {
-    const onToggle = () => setInvOpen((v) => !v);
+    const onToggle = () =>
+      setInvOpen((v) => {
+        if (tutorialGateRef.current && v) return v;
+        return !v;
+      });
+    const onOpen = () => setInvOpen(true);
+    const onClose = (e: Event) => {
+      const force = e instanceof CustomEvent && Boolean((e.detail as { force?: boolean } | undefined)?.force);
+      if (tutorialGateRef.current && !force) return;
+      setInvOpen(false);
+    };
     window.addEventListener("ui:toggleInventory", onToggle);
-    return () => window.removeEventListener("ui:toggleInventory", onToggle);
+    window.addEventListener("ui:openInventory", onOpen);
+    window.addEventListener("ui:closeInventory", onClose);
+    return () => {
+      window.removeEventListener("ui:toggleInventory", onToggle);
+      window.removeEventListener("ui:openInventory", onOpen);
+      window.removeEventListener("ui:closeInventory", onClose);
+    };
   }, []);
+
+  useEffect(() => {
+    const onBoost = () => boostTutorialPotions(3);
+    window.addEventListener("ui:tutorialBoostPotions", onBoost);
+    return () => window.removeEventListener("ui:tutorialBoostPotions", onBoost);
+  }, [boostTutorialPotions]);
 
   function openInventory() {
     setInvOpen(true);
   }
   function closeInventory() {
+    if (tutorialPotionGate) return;
     setInvOpen(false);
   }
 
@@ -183,7 +211,7 @@ export function HUD({
           overflow: "hidden",
         }}
       >
-        <StatChip color={COLORS.heart} icon="♥" value={`${hero.hp}/${hero.hpMax}`} />
+        <StatChip color={COLORS.heart} icon="♥" value={`${hero.hp}/${hero.hpMax}`} tutorialTag="hp" />
         <StatChip color={COLORS.accent} icon="◆" value={`${hero.focus}/${hero.focusMax}`} />
         <StatChip color={COLORS.text} icon="🛡" value={`${hero.armor}`} />
         <StatChip color={COLORS.textMuted} icon={t("hud.turnAbbr")} value={`${turn}`} mono />
@@ -297,6 +325,7 @@ export function HUD({
           </div>
         </div>
         <button
+          data-tutorial="bag"
           onClick={onBagClick}
           onPointerDown={onBagPointerDown}
           onPointerMove={onBagPointerMove}
@@ -348,6 +377,7 @@ export function HUD({
           onUsePotion={onUsePotion}
           onEquipWeapon={equipWeapon}
           onDropItem={dropItem}
+          tutorialPotionGate={tutorialPotionGate === true}
         />
       )}
     </div>
@@ -359,14 +389,17 @@ function StatChip({
   icon,
   value,
   mono,
+  tutorialTag,
 }: {
   color: string;
   icon: string;
   value: string;
   mono?: boolean;
+  tutorialTag?: string;
 }) {
   return (
     <span
+      data-tutorial={tutorialTag}
       style={{
         ...pixelChip,
         padding: "4px 8px",
@@ -389,6 +422,7 @@ function InventorySheet({
   onUsePotion,
   onEquipWeapon,
   onDropItem,
+  tutorialPotionGate,
 }: {
   hero: ReturnType<typeof useRunStore.getState>["state"]["hero"];
   gold: number;
@@ -396,8 +430,10 @@ function InventorySheet({
   onUsePotion: () => void;
   onEquipWeapon: (itemId: string | null) => boolean;
   onDropItem: (itemId: string) => boolean;
+  tutorialPotionGate: boolean;
 }) {
   const canUsePotion = hero.potions > 0 && hero.hp < hero.hpMax;
+  const allowedPotionId = "potion-0";
   const GRID_COLS = 4;
   const GRID_ROWS = 3;
   const items: Array<
@@ -461,6 +497,7 @@ function InventorySheet({
   }, [pinned]);
 
   function requestClose() {
+    if (tutorialPotionGate) return;
     if (phase === "exit") return;
     setPhase("exit");
     window.setTimeout(() => onClose(), 170);
@@ -758,10 +795,11 @@ function InventorySheet({
                   key={`weapon-${p.id}`}
                   item={item}
                   equipped={equipped}
+                  locked={tutorialPotionGate}
                   moving={movingItemId === p.id}
-                  moveModeActive={movingItemId !== null}
-                  onStartMove={() => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
-                  onToggleEquip={() => onEquipWeapon(equipped ? null : p.id)}
+                  moveModeActive={tutorialPotionGate ? false : movingItemId !== null}
+                  onStartMove={tutorialPotionGate ? () => {} : () => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
+                  onToggleEquip={tutorialPotionGate ? () => {} : () => onEquipWeapon(equipped ? null : p.id)}
                   x={p.x}
                   y={p.y}
                   w={p.w}
@@ -775,25 +813,29 @@ function InventorySheet({
                   key={p.id}
                   icon="🌿"
                   label={t("inventory.leaf")}
+                  locked={tutorialPotionGate}
                   moving={movingItemId === p.id}
-                  moveModeActive={movingItemId !== null}
-                  onStartMove={() => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
+                  moveModeActive={tutorialPotionGate ? false : movingItemId !== null}
+                  onStartMove={tutorialPotionGate ? () => {} : () => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
                   x={p.x}
                   y={p.y}
                 />
               );
             }
+            const isAllowed = p.id === allowedPotionId;
+            const potionDisabled = tutorialPotionGate ? !isAllowed || !canUsePotion : !canUsePotion;
             return (
               <InventorySlotPotion
                 key={p.id}
                 onClick={onUsePotion}
-                disabled={!canUsePotion}
-                highlight={canUsePotion}
+                disabled={potionDisabled}
+                highlight={tutorialPotionGate ? isAllowed && canUsePotion : canUsePotion}
                 label={t("inventory.potion")}
                 tooltip={t("inventory.potionHint", { potions: hero.potions })}
                 moving={movingItemId === p.id}
-                moveModeActive={movingItemId !== null}
-                onStartMove={() => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
+                moveModeActive={tutorialPotionGate ? false : movingItemId !== null}
+                onStartMove={tutorialPotionGate ? () => {} : () => setMovingItemId((cur) => (cur === p.id ? null : p.id))}
+                tutorialTag={p.id === "potion-0"}
                 x={p.x}
                 y={p.y}
               />
@@ -874,6 +916,7 @@ function inventorySlotBaseStyle(): React.CSSProperties {
 function InventorySlotItem({
   icon,
   label,
+  locked,
   moving,
   moveModeActive,
   onStartMove,
@@ -882,6 +925,7 @@ function InventorySlotItem({
 }: {
   icon: string;
   label: string;
+  locked?: boolean;
   moving: boolean;
   moveModeActive: boolean;
   onStartMove: () => void;
@@ -893,10 +937,12 @@ function InventorySlotItem({
   return (
     <button
       onContextMenu={(e) => {
+        if (locked) return;
         e.preventDefault();
         onStartMove();
       }}
       onPointerDown={(e) => {
+        if (locked) return;
         if (e.pointerType === "mouse") return;
         ignoreClickRef.current = false;
         if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
@@ -914,6 +960,7 @@ function InventorySlotItem({
         longPressRef.current = null;
       }}
       onClick={() => {
+        if (locked) return;
         if (ignoreClickRef.current) return;
         if (moveModeActive) onStartMove();
       }}
@@ -925,7 +972,8 @@ function InventorySlotItem({
         gridColumnStart: x + 1,
         gridRowStart: y + 1,
         zIndex: 1,
-        cursor: "pointer",
+        cursor: locked ? "default" : "pointer",
+        opacity: locked ? 0.65 : 1,
         fontFamily: FONTS.body,
       }}
       title={label}
@@ -939,6 +987,7 @@ function InventorySlotItem({
 function InventorySlotWeapon({
   item,
   equipped,
+  locked,
   moving,
   moveModeActive,
   onStartMove,
@@ -950,6 +999,7 @@ function InventorySlotWeapon({
 }: {
   item: ReturnType<typeof useRunStore.getState>["state"]["hero"]["items"][number];
   equipped: boolean;
+  locked?: boolean;
   moving: boolean;
   moveModeActive: boolean;
   onStartMove: () => void;
@@ -969,10 +1019,12 @@ function InventorySlotWeapon({
   return (
     <button
       onContextMenu={(e) => {
+        if (locked) return;
         e.preventDefault();
         onStartMove();
       }}
       onPointerDown={(e) => {
+        if (locked) return;
         if (e.pointerType === "mouse") return;
         ignoreClickRef.current = false;
         if (longPressRef.current != null) window.clearTimeout(longPressRef.current);
@@ -990,6 +1042,7 @@ function InventorySlotWeapon({
         longPressRef.current = null;
       }}
       onClick={() => {
+        if (locked) return;
         if (ignoreClickRef.current) return;
         if (moveModeActive) onStartMove();
         else onToggleEquip();
@@ -1003,7 +1056,8 @@ function InventorySlotWeapon({
         gridRowStart: y + 1,
         gridColumnEnd: `span ${w}`,
         gridRowEnd: `span ${h}`,
-        cursor: "pointer",
+        cursor: locked ? "default" : "pointer",
+        opacity: locked ? 0.65 : 1,
         fontFamily: FONTS.body,
         position: "relative",
         zIndex: 2,
@@ -1045,6 +1099,7 @@ function InventorySlotPotion({
   moving,
   moveModeActive,
   onStartMove,
+  tutorialTag,
   x,
   y,
 }: {
@@ -1056,6 +1111,7 @@ function InventorySlotPotion({
   moving: boolean;
   moveModeActive: boolean;
   onStartMove: () => void;
+  tutorialTag?: boolean;
   x: number;
   y: number;
 }) {
@@ -1064,6 +1120,7 @@ function InventorySlotPotion({
   return (
     <button
       aria-disabled={disabled}
+      data-tutorial={tutorialTag ? "potion" : undefined}
       onContextMenu={(e) => {
         e.preventDefault();
         onStartMove();
