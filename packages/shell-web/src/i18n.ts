@@ -9,7 +9,7 @@ const LOCALE_CHANGED_EVENT = "gridlore:locale-changed";
 
 const DICTS: Record<Locale, Dict> = {
   en: {
-    "app.title": "DUNGEON AND PAWS",
+    "app.title": "DUNGEONS & PAWS",
     "header.langLabel": "Language",
     "header.helpLabel": "How to play",
     "header.settingsLabel": "Settings",
