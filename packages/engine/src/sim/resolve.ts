@@ -14,7 +14,7 @@
  *   - Others → no resource gain, tile still consumed
  */
 
-import type { Cell } from "../core/types.js";
+import type { Cell, ItemInstance, Rune } from "../core/types.js";
 import type { GameEvent } from "../core/events.js";
 import { emptyTile } from "../world/grid.js";
 import type { RunState } from "../run/state.js";
@@ -29,6 +29,12 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
   const tile = state.currentFloor.grid.get(cell);
   if (tile.kind === "item" && tile.payload && tile.payload.kind === "item") {
     const item = tile.payload.item;
+    if (!canAddItemToBag(state.hero.items, item)) {
+      return {
+        state,
+        events: [{ type: "ITEM_PICKUP_BLOCKED", cell, itemKind: item.kind, reason: "bag_full" }],
+      };
+    }
     const newGrid = state.currentFloor.grid.set(
       cell,
       emptyTile(`item-${state.turn}-${cell.x}-${cell.y}`),
@@ -68,6 +74,7 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
 
   let nextHero = state.hero;
   let nextMeta = state.meta;
+  let nextPassiveCounts = state.currentFloor.runePassiveCounts;
   nextMeta = { ...nextMeta, score: nextMeta.score + 10 };
 
   const xpResult = grantXp(nextHero, 2);
@@ -90,28 +97,36 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
   switch (tile.rune) {
     case "tide": {
       const gain = Math.min(1, nextHero.focusMax - nextHero.focus);
-      if (gain > 0) {
+      if (gain > 0 && canGainPassive(nextPassiveCounts, "tide")) {
         nextHero = { ...nextHero, focus: nextHero.focus + gain };
         events.push({ type: "FOCUS_GAINED", amount: gain });
+        nextPassiveCounts = incPassive(nextPassiveCounts, "tide");
       }
       break;
     }
     case "coin": {
-      nextMeta = { ...nextMeta, gold: nextMeta.gold + 1 };
-      events.push({ type: "GOLD_GAINED", amount: 1 });
+      if (canGainPassive(nextPassiveCounts, "coin")) {
+        nextMeta = { ...nextMeta, gold: nextMeta.gold + 1 };
+        events.push({ type: "GOLD_GAINED", amount: 1 });
+        nextPassiveCounts = incPassive(nextPassiveCounts, "coin");
+      }
       break;
     }
     case "bone": {
       const gain = Math.min(1, nextHero.hpMax - nextHero.hp);
-      if (gain > 0) {
+      if (gain > 0 && canGainPassive(nextPassiveCounts, "bone")) {
         nextHero = { ...nextHero, hp: nextHero.hp + gain };
         events.push({ type: "HP_HEALED", amount: gain });
+        nextPassiveCounts = incPassive(nextPassiveCounts, "bone");
       }
       break;
     }
     case "iron": {
-      nextHero = { ...nextHero, armor: nextHero.armor + 1 };
-      events.push({ type: "ARMOR_GAINED", amount: 1 });
+      if (canGainPassive(nextPassiveCounts, "iron")) {
+        nextHero = { ...nextHero, armor: nextHero.armor + 1 };
+        events.push({ type: "ARMOR_GAINED", amount: 1 });
+        nextPassiveCounts = incPassive(nextPassiveCounts, "iron");
+      }
       break;
     }
     default:
@@ -130,8 +145,77 @@ export function resolveTileAt(state: RunState, cell: Cell): ResolveResult {
       ...state,
       hero: nextHero,
       meta: nextMeta,
-      currentFloor: { ...state.currentFloor, grid: newGrid },
+      currentFloor: { ...state.currentFloor, grid: newGrid, runePassiveCounts: nextPassiveCounts },
     },
     events,
   };
+}
+
+function canAddItemToBag(existing: readonly ItemInstance[], item: ItemInstance): boolean {
+  if (item.kind !== "sword" && item.kind !== "staff") return true;
+  const weapons = existing.filter((it) => it.kind === "sword" || it.kind === "staff");
+  const BAG_COLS = 4;
+  const BAG_ROWS = 3;
+  const occupied = Array.from({ length: BAG_ROWS }, () => Array.from({ length: BAG_COLS }, () => false));
+
+  const sorted = [...weapons].sort((a, b) => a.id.localeCompare(b.id));
+  for (const w of sorted) {
+    const dims = weaponDims(w.kind);
+    if (!placeFirstFit(occupied, BAG_COLS, BAG_ROWS, dims.w, dims.h)) return false;
+  }
+  const newDims = weaponDims(item.kind);
+  return placeFirstFit(occupied, BAG_COLS, BAG_ROWS, newDims.w, newDims.h);
+}
+
+function weaponDims(kind: "sword" | "staff"): { w: number; h: number } {
+  return kind === "sword" ? { w: 1, h: 2 } : { w: 2, h: 1 };
+}
+
+function placeFirstFit(
+  occupied: boolean[][],
+  cols: number,
+  rows: number,
+  w: number,
+  h: number,
+): boolean {
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (!canPlace(occupied, cols, rows, x, y, w, h)) continue;
+      for (let yy = y; yy < y + h; yy++) {
+        for (let xx = x; xx < x + w; xx++) occupied[yy]![xx] = true;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+function canPlace(
+  occupied: boolean[][],
+  cols: number,
+  rows: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): boolean {
+  if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false;
+  for (let yy = y; yy < y + h; yy++) {
+    for (let xx = x; xx < x + w; xx++) {
+      if (occupied[yy]![xx]!) return false;
+    }
+  }
+  return true;
+}
+
+function canGainPassive(counts: Partial<Record<Rune, number>>, rune: Rune): boolean {
+  const MAX = 2;
+  const n = counts[rune] ?? 0;
+  return n < MAX;
+}
+
+function incPassive(counts: Partial<Record<Rune, number>>, rune: Rune): Partial<Record<Rune, number>> {
+  const n = (counts[rune] ?? 0) + 1;
+  if (counts[rune] === n) return counts;
+  return { ...counts, [rune]: n };
 }

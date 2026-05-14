@@ -47,6 +47,7 @@ const BASE_HIT_FLASH_MS = 260;
 const BASE_DAMAGE_FLOAT_MS = 560;
 const BASE_LATTICE_PULSE_MS = 620;
 const BASE_LATTICE_POP_MS = 520;
+const BASE_BOMB_FLASH_MS = 420;
 
 export class GridRenderer {
   private readonly app: Application;
@@ -196,6 +197,11 @@ export class GridRenderer {
 
     for (const e of events) {
       switch (e.type) {
+        case "BOMB_EXPLODED": {
+          this.animateBombExplosion(e.cells, e.orientation);
+          this.triggerShake(4.2, 220);
+          break;
+        }
         case "DAMAGE_DEALT": {
           if (e.amount <= 0) break;
           const source = e.source;
@@ -319,6 +325,31 @@ export class GridRenderer {
 
     this.hitFlash(opts.to);
     this.damageNumber(opts.to, opts.showDamage);
+  }
+
+  private animateBombExplosion(cells: readonly Cell[], orientation: "h" | "v"): void {
+    if (!cells || cells.length === 0) return;
+    const { cardW, cardH, radius } = this.cardDims();
+    const g = new Graphics();
+    g.alpha = 0;
+    this.animationLayer.addChild(g);
+
+    const isH = orientation === "h";
+    const fill = COLORS.attackStat;
+    const w = isH ? cardW * 0.96 : cardW * 0.28;
+    const h = isH ? cardH * 0.28 : cardH * 0.96;
+
+    for (const cell of cells) {
+      const c = this.cellCenterPx(cell);
+      g.roundRect(c.x - w / 2, c.y - h / 2, w, h, radius * 0.55).fill({ color: fill, alpha: 0.42 });
+    }
+
+    const durationMs = this.animMs(BASE_BOMB_FLASH_MS);
+    const update = (t: number) => {
+      const peak = Math.sin(Math.PI * t);
+      g.alpha = 0.95 * peak;
+    };
+    this.activeAnimations.push({ node: g, elapsedMs: 0, durationMs, update });
   }
 
   private hitFlash(cell: Cell): void {
@@ -753,6 +784,10 @@ export class GridRenderer {
         this.addEmoji(KEY_EMOJI, cx, cy, contentScale * TILE_EMOJI_SCALE);
         return;
       }
+      case "bomb": {
+        this.addEmoji("💣", cx, cy, contentScale * TILE_EMOJI_SCALE);
+        return;
+      }
       case "enemy": {
         const enemyId =
           tile.payload && tile.payload.kind === "enemy" ? tile.payload.enemyId : null;
@@ -837,6 +872,32 @@ export class GridRenderer {
           key.anchor.set(0, 1);
           key.position.set(cx - cardW / 2 + pad, cy + cardH / 2 - pad);
           this.tileLayer.addChild(key);
+        }
+        return;
+      }
+      case "bomb": {
+        const payload = tile.payload && tile.payload.kind === "bomb" ? tile.payload : null;
+        if (!payload) return;
+        const orient = payload.orientation === "h" ? "↔" : "↕";
+        this.addCornerIconValue(
+          orient,
+          "",
+          cx - cardW / 2,
+          cy - cardH / 2,
+          "left-top",
+          contentScale,
+          COLORS.cornerStat,
+        );
+        if (payload.countdown !== null) {
+          this.addCornerIconValue(
+            "⏳",
+            `${payload.countdown}`,
+            cx + cardW / 2,
+            cy - cardH / 2,
+            "right-top",
+            contentScale,
+            COLORS.hpStat,
+          );
         }
         return;
       }

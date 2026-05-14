@@ -47,6 +47,7 @@ export type TileKind =
   | "empty"
   | "rune"
   | "key"
+  | "bomb"
   | "enemy"
   | "item"
   | "treasure"
@@ -61,6 +62,12 @@ export type TileKind =
 
 export type TilePayload =
   | { readonly kind: "enemy"; readonly enemyId: string }
+  | {
+      readonly kind: "bomb";
+      readonly orientation: "h" | "v";
+      readonly countdown: number | null;
+      readonly armedAtTurn: number | null;
+    }
   | { readonly kind: "item"; readonly item: ItemInstance }
   | { readonly kind: "treasure"; readonly lootTable: string }
   | { readonly kind: "hazard"; readonly damage: number }

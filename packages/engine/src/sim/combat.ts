@@ -44,6 +44,7 @@ function resolveCombatInternal(state: RunState, cell: Cell, allowRetaliation: bo
   }
 
   const hasKeyAlready = gridHasAnyKey(state.currentFloor.grid);
+  const keyPolicy = state.currentFloor.keyPolicy;
 
   const enemyId = tile.payload.enemyId;
   const enemy = state.currentFloor.enemies.get(enemyId);
@@ -53,9 +54,10 @@ function resolveCombatInternal(state: RunState, cell: Cell, allowRetaliation: bo
       state.currentFloor.exitRequiresKey &&
       !state.currentFloor.exitUnlocked &&
       !hasKeyAlready &&
-      (state.currentFloor.keyEnemyId === enemyId || state.currentFloor.enemies.size === 0);
+      shouldDropKey(keyPolicy, state.currentFloor.keyEnemyId, enemyId, state.currentFloor.enemies.size);
     const shouldClearKeyEnemyId =
-      state.currentFloor.keyEnemyId === enemyId || state.currentFloor.enemies.size === 0;
+      state.currentFloor.keyEnemyId === enemyId ||
+      (keyPolicy === "last_enemy" && state.currentFloor.enemies.size === 0);
     const grid = state.currentFloor.grid.set(
       cell,
       dropsKey
@@ -130,7 +132,7 @@ function resolveCombatInternal(state: RunState, cell: Cell, allowRetaliation: bo
       state.currentFloor.exitRequiresKey &&
       !state.currentFloor.exitUnlocked &&
       !hasKeyAlready &&
-      (state.currentFloor.keyEnemyId === enemyId || nextEnemies.size === 0);
+      shouldDropKey(keyPolicy, state.currentFloor.keyEnemyId, enemyId, nextEnemies.size);
     nextGrid = nextGrid.set(
       cell,
       dropsKey
@@ -141,7 +143,7 @@ function resolveCombatInternal(state: RunState, cell: Cell, allowRetaliation: bo
     if (dropsKey) {
       events.push({ type: "KEY_DROPPED", cell });
     }
-    if (state.currentFloor.keyEnemyId === enemyId || nextEnemies.size === 0) {
+    if (state.currentFloor.keyEnemyId === enemyId || (keyPolicy === "last_enemy" && nextEnemies.size === 0)) {
       nextKeyEnemyId = null;
     }
     nextMeta = { ...nextMeta, score: nextMeta.score + 200 };
@@ -202,4 +204,21 @@ function gridHasAnyKey(grid: RunState["currentFloor"]["grid"]): boolean {
     if (tile.kind === "key") return true;
   }
   return false;
+}
+
+function shouldDropKey(
+  policy: RunState["currentFloor"]["keyPolicy"],
+  keyEnemyId: string | null,
+  enemyId: string,
+  remainingEnemies: number,
+): boolean {
+  switch (policy) {
+    case "assigned":
+    case "reinforcement":
+      return keyEnemyId !== null && keyEnemyId === enemyId;
+    case "last_enemy":
+      return remainingEnemies === 0;
+    case "none":
+      return false;
+  }
 }

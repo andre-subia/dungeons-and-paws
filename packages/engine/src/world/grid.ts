@@ -217,6 +217,22 @@ export function keyTile(id: string): Tile {
   return { id, kind: "key", rune: null, hidden: false, anchored: false };
 }
 
+export function bombTile(
+  id: string,
+  orientation: "h" | "v",
+  countdown: number | null = null,
+  armedAtTurn: number | null = null,
+): Tile {
+  return {
+    id,
+    kind: "bomb",
+    rune: null,
+    hidden: false,
+    anchored: false,
+    payload: { kind: "bomb", orientation, countdown, armedAtTurn },
+  };
+}
+
 /**
  * Convenience: an enemy tile.
  * The `rune` field is set to the enemy's rune so it counts toward

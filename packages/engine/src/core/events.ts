@@ -32,8 +32,21 @@ export type KeystoneBonusEffect =
 export type GameEvent =
   | { readonly type: "TURN_STARTED"; readonly turn: number }
   | InputRejectedEvent
+  | {
+      readonly type: "BOMB_EXPLODED";
+      readonly origin: Cell;
+      readonly orientation: "h" | "v";
+      readonly cells: readonly Cell[];
+    }
   | { readonly type: "ITEM_SPAWNED"; readonly cell: Cell; readonly itemKind: ItemKind }
+  | {
+      readonly type: "ITEM_PICKUP_BLOCKED";
+      readonly cell: Cell;
+      readonly itemKind: ItemKind;
+      readonly reason: "bag_full";
+    }
   | { readonly type: "ITEM_PICKED_UP"; readonly cell: Cell; readonly itemKind: ItemKind }
+  | { readonly type: "ITEM_DROPPED"; readonly itemKind: ItemKind }
   | {
       readonly type: "WEAPON_EQUIPPED";
       readonly itemKind: ItemKind | null;

@@ -53,6 +53,7 @@ export function HUD({
   const state = useRunStore((s) => s.state);
   const usePotion = useRunStore((s) => s.usePotion);
   const equipWeapon = useRunStore((s) => s.equipWeapon);
+  const dropItem = useRunStore((s) => s.dropItem);
   const { trigger } = useWebHaptics();
   const events = useRunStore((s) => s.lastEvents);
   const lastEvent = pickPrimaryEvent(events);
@@ -346,6 +347,7 @@ export function HUD({
           onClose={closeInventory}
           onUsePotion={onUsePotion}
           onEquipWeapon={equipWeapon}
+          onDropItem={dropItem}
         />
       )}
     </div>
@@ -386,12 +388,14 @@ function InventorySheet({
   onClose,
   onUsePotion,
   onEquipWeapon,
+  onDropItem,
 }: {
   hero: ReturnType<typeof useRunStore.getState>["state"]["hero"];
   gold: number;
   onClose: () => void;
   onUsePotion: () => void;
   onEquipWeapon: (itemId: string | null) => boolean;
+  onDropItem: (itemId: string) => boolean;
 }) {
   const canUsePotion = hero.potions > 0 && hero.hp < hero.hpMax;
   const GRID_COLS = 4;
@@ -410,6 +414,7 @@ function InventorySheet({
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const swipeCloseRef = useRef<{ pointerId: number; startX: number; startY: number; startScrollTop: number } | null>(null);
   const [movingItemId, setMovingItemId] = useState<string | null>(null);
+  const [dropConfirmItemId, setDropConfirmItemId] = useState<string | null>(null);
   const BAG_LAYOUT_KEY = "gridlore:bagLayout:v1";
   const BAG_PINNED_KEY = "gridlore:bagPinned:v1";
   const [layout, setLayout] = useState<Record<string, { x: number; y: number }>>(() => {
@@ -459,6 +464,14 @@ function InventorySheet({
     if (phase === "exit") return;
     setPhase("exit");
     window.setTimeout(() => onClose(), 170);
+  }
+
+  function droppableWeaponId(id: string | null): string | null {
+    if (!id) return null;
+    const item = hero.items.find((it) => it.id === id);
+    if (!item) return null;
+    if (item.kind !== "sword" && item.kind !== "staff") return null;
+    return id;
   }
 
   function onSheetPointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -620,7 +633,14 @@ function InventorySheet({
   return (
     <div
       data-swipe-exempt="true"
-      onClick={requestClose}
+      onClick={() => {
+        const id = droppableWeaponId(movingItemId);
+        if (id) {
+          setDropConfirmItemId(id);
+          return;
+        }
+        requestClose();
+      }}
       style={{
         position: "fixed",
         inset: 0,
@@ -781,6 +801,59 @@ function InventorySheet({
           })}
         </div>
       </div>
+      {dropConfirmItemId && (
+        <div
+          onClick={() => setDropConfirmItemId(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(8, 5, 3, 0.7)",
+            backdropFilter: "blur(6px) saturate(0.9)",
+            WebkitBackdropFilter: "blur(6px) saturate(0.9)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 7,
+            padding: 18,
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(420px, 100%)",
+              background: "rgba(20, 14, 8, 0.88)",
+              backdropFilter: "blur(18px) saturate(1.25)",
+              WebkitBackdropFilter: "blur(18px) saturate(1.25)",
+              ...pixelBorder(COLORS.death, 2),
+              padding: "18px 18px 16px",
+              textAlign: "center",
+              color: COLORS.text,
+              boxShadow: `0 0 0 4px rgba(0, 0, 0, 0.4), 0 0 34px rgba(196, 88, 90, 0.35)`,
+            }}
+          >
+            <div style={{ fontSize: 34, lineHeight: "34px", marginBottom: 8 }}>🗑</div>
+            <div style={{ ...sectionLabel, color: COLORS.death }}>{t("inventory.dropTitle")}</div>
+            <div style={{ marginTop: 10, fontFamily: FONTS.body, fontSize: 13, color: COLORS.textMuted }}>
+              {t("inventory.dropConfirm")}
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 16, flexWrap: "wrap" }}>
+              <button onClick={() => setDropConfirmItemId(null)} style={{ ...pixelButtonGhost, padding: "10px 16px" }}>
+                {t("inventory.dropCancel")}
+              </button>
+              <button
+                onClick={() => {
+                  onDropItem(dropConfirmItemId);
+                  setMovingItemId(null);
+                  setDropConfirmItemId(null);
+                }}
+                style={{ ...pixelButtonPrimary, fontSize: 11 }}
+              >
+                {t("inventory.dropConfirmYes")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1194,8 +1267,12 @@ function formatEvent(e: NonNullable<ReturnType<typeof useRunStore.getState>["las
   switch (e.type) {
     case "ITEM_SPAWNED":
       return t("event.itemSpawned", { item: tItemKind(e.itemKind), x: e.cell.x, y: e.cell.y });
+    case "ITEM_PICKUP_BLOCKED":
+      return t("event.itemPickupBlocked", { item: tItemKind(e.itemKind) });
     case "ITEM_PICKED_UP":
       return t("event.itemPickedUp", { item: tItemKind(e.itemKind) });
+    case "ITEM_DROPPED":
+      return t("event.itemDropped", { item: tItemKind(e.itemKind) });
     case "WEAPON_EQUIPPED":
       return e.itemKind ? t("event.weaponEquipped", { item: tItemKind(e.itemKind) }) : t("event.weaponUnequipped");
     case "WEAPON_BROKE":
@@ -1250,6 +1327,8 @@ function formatEvent(e: NonNullable<ReturnType<typeof useRunStore.getState>["las
       return t("event.heroDied");
     case "DAMAGE_DEALT":
       return "·";
+    case "BOMB_EXPLODED":
+      return "💥";
     case "INPUT_REJECTED":
       return `× ${formatReject(e)}`;
     case "TURN_STARTED":

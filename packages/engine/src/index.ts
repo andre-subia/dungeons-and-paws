@@ -45,6 +45,7 @@ export {
   runeTile,
   exitTile,
   keyTile,
+  bombTile,
   enemyTile,
   itemTile,
 } from "./world/grid.js";

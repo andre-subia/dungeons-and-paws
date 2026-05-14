@@ -25,7 +25,7 @@ import {
   type Rune,
 } from "../core/types.js";
 import type { GameEvent } from "../core/events.js";
-import { runeTile, type Grid } from "../world/grid.js";
+import { enemyTile, runeTile, type Grid } from "../world/grid.js";
 import {
   newlyDecharged,
   recomputeLattices,
@@ -35,28 +35,27 @@ import {
 import type { RunState } from "../run/state.js";
 import { applyKeystone } from "./keystone.js";
 import type { ResolveResult } from "./resolve.js";
+import type { EnemyTemplateId } from "../entities/enemy-templates.js";
+import { EASY_TEMPLATES, ENEMY_TEMPLATES, HARD_TEMPLATES, MEDIUM_TEMPLATES } from "../entities/enemy-templates.js";
+import type { EnemyState } from "../entities/enemy.js";
 
 const KEYSTONE_BIAS_WEIGHT = 6;
 const BASE_WEIGHT = 1;
 
 export function spawnEndOfTurnRune(state: RunState): ResolveResult {
-  const tutorialNeedsSpawns = state.currentFloor.index === 0 && !state.currentFloor.exitUnlocked;
-
-  if (!tutorialNeedsSpawns && state.currentFloor.enemies.size === 0) {
+  if (state.currentFloor.enemies.size === 0) {
     return { state, events: [] };
   }
 
-  if (!tutorialNeedsSpawns) {
-    const heroPos = state.hero.position;
-    let anyThreatNearby = false;
-    for (const enemy of state.currentFloor.enemies.values()) {
-      if (chebyshev(enemy.position, heroPos) <= 1) {
-        anyThreatNearby = true;
-        break;
-      }
+  const heroPos = state.hero.position;
+  let anyThreatNearby = false;
+  for (const enemy of state.currentFloor.enemies.values()) {
+    if (chebyshev(enemy.position, heroPos) <= 1) {
+      anyThreatNearby = true;
+      break;
     }
-    if (!anyThreatNearby) return { state, events: [] };
   }
+  if (!anyThreatNearby) return { state, events: [] };
 
   const empties: Cell[] = [];
   for (const { cell, tile } of state.currentFloor.grid.each()) {
@@ -123,11 +122,88 @@ export function spawnEndOfTurnRune(state: RunState): ResolveResult {
   return { state: nextState, events };
 }
 
+export function spawnEndOfTurnReinforcement(state: RunState): ResolveResult {
+  if (!state.currentFloor.exitRequiresKey) return { state, events: [] };
+  if (state.currentFloor.exitUnlocked) return { state, events: [] };
+  if (state.currentFloor.keyPolicy !== "reinforcement") return { state, events: [] };
+  if (gridHasAnyKey(state.currentFloor.grid)) return { state, events: [] };
+
+  const floorIndex = state.currentFloor.index;
+  const enemies = state.currentFloor.enemies;
+  const keyEnemyId = state.currentFloor.keyEnemyId;
+
+  const target = floorIndex < 20 ? 2 : 3;
+  const shouldSpawn = keyEnemyId === null || enemies.size < target;
+  if (!shouldSpawn) return { state, events: [] };
+
+  const grid = state.currentFloor.grid;
+  const borderCandidates: Cell[] = [];
+  for (const { cell, tile } of grid.each()) {
+    const isBorder = cell.x === 0 || cell.y === 0 || cell.x === grid.width - 1 || cell.y === grid.height - 1;
+    if (!isBorder) continue;
+    if (tile.kind !== "empty") continue;
+    if (cellEq(cell, state.hero.position)) continue;
+    if (cellEq(cell, state.currentFloor.exitCell)) continue;
+    borderCandidates.push(cell);
+  }
+  if (borderCandidates.length === 0) return { state, events: [] };
+
+  const rng = new SeededRNG(`reinforce:${state.seed}:${state.turn}`);
+  const spawnCell = rng.pick(borderCandidates);
+
+  const pool = pickTemplatePool(floorIndex);
+  const templateId = rng.pick(pool) as EnemyTemplateId;
+  const template = ENEMY_TEMPLATES[templateId];
+
+  const enemyId = `e-f${floorIndex}-r-${state.turn}-${spawnCell.x}-${spawnCell.y}`;
+  const hpBoost = Math.floor(floorIndex / 3);
+  const attackBoost = Math.floor(floorIndex / 8);
+
+  const enemy: EnemyState = {
+    id: enemyId,
+    templateId: template.templateId,
+    archetype: template.archetype,
+    position: spawnCell,
+    hp: template.hp + hpBoost,
+    hpMax: template.hp + hpBoost,
+    attack: template.attack + attackBoost,
+    rune: template.rune,
+    intent: null,
+    modifiers: [],
+  };
+
+  const nextEnemies = new Map(enemies);
+  nextEnemies.set(enemyId, enemy);
+
+  const nextGrid = grid.set(spawnCell, enemyTile(`reinforce-${state.turn}-${spawnCell.x}-${spawnCell.y}`, enemyId, template.rune));
+
+  const nextKeyEnemyId = keyEnemyId === null ? enemyId : keyEnemyId;
+
+  return {
+    state: {
+      ...state,
+      currentFloor: {
+        ...state.currentFloor,
+        grid: nextGrid,
+        enemies: nextEnemies,
+        keyEnemyId: nextKeyEnemyId,
+      },
+    },
+    events: [],
+  };
+}
+
 function hasAnyChargedLattice(snap: LatticeSnapshot): boolean {
   for (const lat of snap.byId.values()) {
     if (lat.isCharged) return true;
   }
   return false;
+}
+
+function pickTemplatePool(floorIndex: number): readonly EnemyTemplateId[] {
+  if (floorIndex < 5) return EASY_TEMPLATES;
+  if (floorIndex < 25) return MEDIUM_TEMPLATES;
+  return HARD_TEMPLATES;
 }
 
 function pickWeightedRune(
@@ -169,4 +245,11 @@ function latticesContaining(
     if (lat) out.push(lat);
   }
   return out;
+}
+
+function gridHasAnyKey(grid: RunState["currentFloor"]["grid"]): boolean {
+  for (const { tile } of grid.each()) {
+    if (tile.kind === "key") return true;
+  }
+  return false;
 }

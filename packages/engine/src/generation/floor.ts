@@ -16,6 +16,7 @@ import { RUNES, cellEq, type Cell, type Rune } from "../core/types.js";
 import {
   Grid,
   emptyTile,
+  bombTile,
   enemyTile,
   exitTile,
   itemTile,
@@ -35,6 +36,7 @@ import {
 
 const RUNE_DENSITY = 0.55;
 const ITEM_SPAWN_CHANCE = 0.55;
+const BOMB_SPAWN_CHANCE = 0.28;
 
 export function generateFloor(
   seed: string,
@@ -74,13 +76,15 @@ export function generateFloor(
   grid = enemyPlacement.grid;
   const enemies = enemyPlacement.enemies;
 
+  grid = placeBombs(grid, rng, floorIndex, heroStart, exitCell);
   grid = placeFloorItem(grid, rng, floorIndex, heroStart, exitCell);
 
   const lattices = recomputeLattices(grid);
 
   const exitRequiresKey =
     floorIndex > 0 && enemies.size > 0 ? rng.next() < 0.35 : false;
-  const keyEnemyId = exitRequiresKey ? (rng.pick(Array.from(enemies.keys())) as string) : null;
+  const keyPolicy = exitRequiresKey ? (floorIndex < 10 ? "assigned" : "reinforcement") : "none";
+  const keyEnemyId = keyPolicy === "assigned" ? (rng.pick(Array.from(enemies.keys())) as string) : null;
 
   return {
     index: floorIndex,
@@ -91,7 +95,9 @@ export function generateFloor(
     exitCell,
     exitUnlocked: floorIndex > 0 && !exitRequiresKey,
     exitRequiresKey,
+    keyPolicy,
     keyEnemyId,
+    runePassiveCounts: {},
     turn: 0,
   };
 }
@@ -144,10 +150,56 @@ function placeFloorItem(
  * on small boards (reserves hero start + exit + rune fuel).
  */
 function enemyCountForFloor(floorIndex: number, width: number, height: number): number {
-  const wanted = floorIndex < 3 ? 1 : floorIndex < 10 ? 2 : 3;
+  const wanted = floorIndex < 3 ? 1 : floorIndex < 10 ? 2 : floorIndex < 20 ? 3 : 4;
   const candidateCount = width * height - 2;
   const maxEnemies = Math.max(0, candidateCount - 4);
   return Math.max(0, Math.min(wanted, maxEnemies));
+}
+
+function bombCountForFloor(floorIndex: number, width: number, height: number): number {
+  const wanted = floorIndex < 3 ? 1 : floorIndex < 10 ? 2 : 3;
+  const candidateCount = width * height - 2;
+  const maxBombs = Math.max(0, candidateCount - 6);
+  return Math.max(0, Math.min(wanted, maxBombs));
+}
+
+function placeBombs(
+  grid: Grid,
+  rng: SeededRNG,
+  floorIndex: number,
+  heroStart: Cell,
+  exitCell: Cell,
+): Grid {
+  if (floorIndex < 3) return grid;
+  if (rng.next() > BOMB_SPAWN_CHANCE) return grid;
+
+  const count = bombCountForFloor(floorIndex, grid.width, grid.height);
+  if (count <= 0) return grid;
+
+  const allCandidates: Cell[] = [];
+  const emptyCandidates: Cell[] = [];
+  for (const { cell, tile } of grid.each()) {
+    if (cellEq(cell, heroStart)) continue;
+    if (cellEq(cell, exitCell)) continue;
+    allCandidates.push(cell);
+    if (tile.kind === "empty") emptyCandidates.push(cell);
+  }
+  const pool = emptyCandidates.length >= count ? emptyCandidates : allCandidates;
+  if (pool.length === 0) return grid;
+
+  const shuffled = rng.shuffle(pool);
+  const placements = Math.min(count, shuffled.length);
+
+  let nextGrid = grid;
+  for (let i = 0; i < placements; i++) {
+    const cell = shuffled[i]!;
+    const orientation = rng.next() < 0.5 ? ("h" as const) : ("v" as const);
+    nextGrid = nextGrid.set(
+      cell,
+      bombTile(`f${floorIndex}-bomb-${i}-${cell.x}-${cell.y}`, orientation, null, null),
+    );
+  }
+  return nextGrid;
 }
 
 function placeEnemies(

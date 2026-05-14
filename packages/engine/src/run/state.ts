@@ -32,7 +32,9 @@ export type FloorState = {
   readonly exitCell: Cell;
   readonly exitUnlocked: boolean;
   readonly exitRequiresKey: boolean;
+  readonly keyPolicy: "none" | "assigned" | "last_enemy" | "reinforcement";
   readonly keyEnemyId: string | null;
+  readonly runePassiveCounts: Partial<Record<import("../core/types.js").Rune, number>>;
   readonly turn: number;
 };
 
@@ -44,6 +46,7 @@ export type PlayerInput =
     }
   | { readonly type: "USE_POTION" }
   | { readonly type: "EQUIP_WEAPON"; readonly itemId: string | null }
+  | { readonly type: "DROP_ITEM"; readonly itemId: string }
   | {
       readonly type: "ABILITY";
       readonly abilityId: string;
