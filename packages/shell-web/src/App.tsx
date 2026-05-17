@@ -328,6 +328,7 @@ export function App() {
   const [, bump] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [animSpeed, setAnimSpeed] = useState(readAnimSpeed);
   const [hapticsEnabled, setHapticsEnabled] = useState(() => readBool(HAPTICS_STORAGE_KEY, DEFAULT_HAPTICS_ENABLED));
   const [musicMuted, setMusicMuted] = useState(() => readBool(MUSIC_MUTED_STORAGE_KEY, false));
@@ -366,7 +367,7 @@ export function App() {
   const refreshLeaderboard = useCallback(async () => {
     if (!hasLeaderboardBackend()) return;
     try {
-      const next = await fetchGlobalLeaderboard(20);
+      const next = await fetchGlobalLeaderboard(100);
       setLeaderboard(next);
     } catch {
       setLeaderboard([]);
@@ -995,11 +996,19 @@ export function App() {
 
   const openHelp = () => {
     setSettingsOpen(false);
+    setLeaderboardOpen(false);
     setHelpOpen(true);
   };
   const openSettings = () => {
     setHelpOpen(false);
+    setLeaderboardOpen(false);
     setSettingsOpen(true);
+  };
+  const openLeaderboard = () => {
+    setHelpOpen(false);
+    setSettingsOpen(false);
+    setLeaderboardOpen(true);
+    refreshLeaderboard();
   };
   const openName = () => setNamePromptOpen(true);
 
@@ -1158,6 +1167,7 @@ export function App() {
           onOpenHelp={openHelp}
           onOpenSettings={openSettings}
           onOpenName={openName}
+          onOpenLeaderboard={openLeaderboard}
         />
       ) : (
         <>
@@ -1226,6 +1236,15 @@ export function App() {
       )}
 
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+      {leaderboardOpen && (
+        <LeaderboardModal
+          entries={leaderboard}
+          configured={hasLeaderboardBackend()}
+          playerName={playerName}
+          onRefresh={refreshLeaderboard}
+          onClose={() => setLeaderboardOpen(false)}
+        />
+      )}
       {settingsOpen && (
         <SettingsModal
           animSpeed={animSpeed}
@@ -1615,6 +1634,132 @@ function ModalShell({
         <div style={{ marginTop: 12 }}>{children}</div>
       </div>
     </div>
+  );
+}
+
+function LeaderboardModal({
+  entries,
+  configured,
+  playerName,
+  onRefresh,
+  onClose,
+}: {
+  entries: ReadonlyArray<LeaderboardEntry>;
+  configured: boolean;
+  playerName: string;
+  onRefresh: () => void;
+  onClose: () => void;
+}) {
+  const trimmedSelf = playerName.trim().toLowerCase();
+  return (
+    <ModalShell
+      title={t("leaderboard.title")}
+      onClose={onClose}
+      rightActions={
+        configured ? (
+          <button
+            onClick={onRefresh}
+            style={{
+              ...pixelChip,
+              fontFamily: FONTS.display,
+              fontSize: 8,
+              letterSpacing: "0.18em",
+              padding: "6px 10px",
+            }}
+          >
+            ⟳ {t("leaderboard.refresh")}
+          </button>
+        ) : undefined
+      }
+    >
+      {!configured ? (
+        <div style={{ color: COLORS.textMuted, fontSize: 14 }}>
+          {t("settings.leaderboardNotConfigured")}
+        </div>
+      ) : entries.length === 0 ? (
+        <div style={{ color: COLORS.textMuted, fontSize: 14 }}>
+          {t("settings.leaderboardEmpty")}
+        </div>
+      ) : (
+        <div
+          style={{
+            maxHeight: "70dvh",
+            overflowY: "auto",
+            paddingRight: 4,
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          {entries.map((entry, i) => {
+            const rank = i + 1;
+            const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
+            const isSelf =
+              trimmedSelf !== "" && entry.name.trim().toLowerCase() === trimmedSelf;
+            return (
+              <div
+                key={`${entry.name}-${entry.seed}-${entry.ts}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "44px 1fr auto",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "8px 10px",
+                  background: isSelf ? "rgba(255, 196, 87, 0.10)" : "rgba(7, 4, 16, 0.45)",
+                  ...pixelBorder(isSelf ? COLORS.primary : COLORS.borderSubtle, 1),
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: FONTS.display,
+                    fontSize: medal ? 18 : 11,
+                    letterSpacing: medal ? 0 : "0.16em",
+                    color: COLORS.text,
+                    textAlign: "center",
+                  }}
+                >
+                  {medal ?? `#${rank}`}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div
+                    style={{
+                      fontFamily: FONTS.display,
+                      fontSize: 11,
+                      letterSpacing: "0.14em",
+                      color: COLORS.text,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {entry.name}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: COLORS.textMuted,
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    {t("hud.floorLabel")} {entry.floor} · {entry.outcome === "win" ? "🏁" : "💀"}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    fontFamily: FONTS.display,
+                    fontSize: 13,
+                    letterSpacing: "0.08em",
+                    color: COLORS.text,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  🏆 {entry.score}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </ModalShell>
   );
 }
 

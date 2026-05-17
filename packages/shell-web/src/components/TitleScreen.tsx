@@ -30,6 +30,7 @@ export function TitleScreen({
   onOpenHelp,
   onOpenSettings,
   onOpenName,
+  onOpenLeaderboard,
 }: {
   playerName: string;
   topRuns: ReadonlyArray<TitleCardEntry>;
@@ -38,6 +39,7 @@ export function TitleScreen({
   onOpenHelp: () => void;
   onOpenSettings: () => void;
   onOpenName: () => void;
+  onOpenLeaderboard: () => void;
 }) {
   const challengers = topRuns.slice(0, 5);
   const ctaLabel = canContinue ? t("title.continue") : t("title.cta");
@@ -132,6 +134,7 @@ export function TitleScreen({
       <MenuFooter
         onOpenHelp={onOpenHelp}
         onOpenSettings={onOpenSettings}
+        onOpenLeaderboard={onOpenLeaderboard}
       />
     </div>
   );
@@ -491,9 +494,11 @@ function ChallengerCard({
 function MenuFooter({
   onOpenHelp,
   onOpenSettings,
+  onOpenLeaderboard,
 }: {
   onOpenHelp: () => void;
   onOpenSettings: () => void;
+  onOpenLeaderboard: () => void;
 }) {
   return (
     <div
@@ -506,6 +511,9 @@ function MenuFooter({
     >
       <button onClick={onOpenHelp} style={{ ...pixelButtonGhost }}>
         📜 {t("title.menuHelp")}
+      </button>
+      <button onClick={onOpenLeaderboard} style={{ ...pixelButtonGhost }}>
+        🏆 {t("title.menuLeaderboard")}
       </button>
       <button onClick={onOpenSettings} style={{ ...pixelButtonGhost }}>
         ⚙ {t("title.menuSettings")}
